@@ -162,6 +162,7 @@ class GraphPage(QWidget):
         self.__keras_model = keras.models.load_model(filepath)
         #self.__logic_layer.initialize(self.__keras_model)
         self.__open_load_info_label.hide()
+        self.__save_model_info_label.hide()
 
     def try_load_points(self):
         """
@@ -214,6 +215,7 @@ class GraphPage(QWidget):
             self.__save_model_info_label.show()
             self.__save_model_info_label.setText('You have to load model first!')
             self.__save_model_info_label.setStyleSheet("QLabel { color : red; }")
+
 
 class GraphLogicLayer:
     def __init__(self, parent):
@@ -344,24 +346,47 @@ class MainGraphFrame(QWidget):
         options_frame.setMaximumWidth(300)
 
         self.scrollable_frame = QScrollArea()
-
+        self.scrollable_frame.setWidgetResizable(True)
         horizontal_layout.addWidget(options_frame)
         horizontal_layout.addWidget(self.scrollable_frame)
+
+        self.__scrollbar_content = QWidget()
         self.__graph_area_layout = QHBoxLayout()
         self.__graph_area_layout.setContentsMargins(0, 0, 0, 0)
+        self.__graph_area_layout.setSpacing(0)
         self.__graph_area_layout.setAlignment(QtCore.Qt.AlignLeft)
-        self.scrollable_frame.setLayout(self.__graph_area_layout)
+        self.__scrollbar_content.setLayout(self.__graph_area_layout)
+
+        self.scrollable_frame.setWidget(self.__scrollbar_content)
 
         self.__add_remove_layer_rc = RemovingCombobox()
         self.__add_remove_layer_rc.setMaximumWidth(412)
+        self.__add_remove_layer_rc.setMinimumWidth(100)
         self.__add_remove_layer_rc.initialize(['layer1', 'layer1'], None, 'Add layer', True, 'Select layer')
 
-        self.__graph_area_layout.insertWidget(0 , self.__add_remove_layer_rc)
+        self.__graph_area_layout.addWidget(self.__add_remove_layer_rc)
+        layer_graph = GraphFrame()
+        layer_graph.setMinimumWidth(300)
+        self.__graph_area_layout.insertWidget(self.__graph_area_layout.count() - 1, layer_graph)
+        layer_graph = GraphFrame()
+        layer_graph.setMinimumWidth(300)
+        self.__graph_area_layout.insertWidget(self.__graph_area_layout.count() - 1, layer_graph)
+        # self.__graph_area_layout.addWidget( layer_graph)
+        #
+        # layer_graph = GraphFrame()
+        # layer_graph.setMinimumWidth(300)
+        # # self.__graph_area_layout.insertWidget(self.__graph_area_layout.count() - 1, layer_graph)
+        # self.__graph_area_layout.addWidget(layer_graph)
 
-        layer_graph = PlotingFrame()
-        layer_graph.setMaximumWidth(412)
+        # self.__graph_area_layout.insertWidget(self.__graph_area_layout.count() - 1, QLabel('Hovna'))
+        # label = QLabel('Veleeeeeeelke hovna')
+        # label.setMinimumWidth(50)
+        # self.__graph_area_layout.addWidget(label)
+        #
+        # label = QLabel('Veleeeeeeelke hovna')
+        # label.setMinimumWidth(50)
+        # self.__graph_area_layout.addWidget(label)
 
-        self.__graph_area_layout.insertWidget(0, layer_graph)
         # layer_graph.clear()
         #layer_graph.hide()
         #self.__graph_area_layout.removeWidget(layer_graph)
@@ -485,6 +510,7 @@ class MainGraphFrame(QWidget):
 
     def update_active_options_layer(self, start_layer):
         self.__options_frame.update_active_options_layer(start_layer)
+
 
 class OptionsFrame(QWidget):
     def __init__(self, *args, **kwargs):
@@ -749,7 +775,7 @@ class OptionsFrame(QWidget):
         self.__t_sne_parameter_gbox.hide()
 
 
-class GraphFrame(QWidget):
+class GraphFrame(QFrame):
     def __init__(self, *args, **kwargs):
         '''
         Popis
@@ -767,13 +793,22 @@ class GraphFrame(QWidget):
         :param parent: nadradený tkinter Widget
         '''
         super().__init__(*args, **kwargs)
-        #self.__neural_layer = neural_layer
+        self.setMaximumWidth(500)
+        self.setObjectName('graphFrame')
+        self.setStyleSheet("#graphFrame { border: 1px solid black; } ")
         layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(QtCore.Qt.AlignTop)
         self.setLayout(layout)
         self.__graph = PlotingFrame()
+
         layout.addWidget(self.__graph)
+        self.__weight_controller = LayerWeightControllerFrame()
+        layout.addWidget(self.__weight_controller)
+
         #self.__graph = PlotingFrame(self, self, height=420)
         #self.__weight_controller = LayerWeightControllerFrame(self, self)
+
 
 class PlotingFrame(QWidget):
     def __init__(self, *args, **kwargs):
@@ -844,14 +879,14 @@ class PlotingFrame(QWidget):
         i = 0
         self.__toolbar = NavigationToolbar(self.__canvas, self)
         self.__toolbar.setMinimumHeight(20)
-        for child in self.__toolbar.children():
-            if not isinstance(child, QLayout):
-                if not isinstance(child, QLabel) and not isinstance(child, QWidgetAction):
-                    print('schovam', child)
-                    child.setVisible(False)
-                else:
-                    print('ukazuje', child)
-                    #child.setVisible(True)
+        # for child in self.__toolbar.children():
+        #     if not isinstance(child, QLayout):
+        #         if not isinstance(child, QLabel) and not isinstance(child, QWidgetAction):
+        #             print('schovam', child)
+        #             child.setVisible(False)
+        #         else:
+        #             print('ukazuje', child)
+        #             #child.setVisible(True)
 
 
 
@@ -879,6 +914,39 @@ class PlotingFrame(QWidget):
 
     def __del__(self):
         print('mazanie graf')
+
+
+class LayerWeightControllerFrame(QWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # self.__controller = controller
+        self.__weights_reference = None
+        self.__bias_reference = None
+        self.__active_slider_dict = {}
+        self.__slider_dict = {}
+        self.__possible_number_of_sliders = 0
+        layout = QVBoxLayout()
+        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(layout)
+
+        self.__scrollable_window = QScrollArea()
+        self.__scrollable_window.setWidgetResizable(True)
+        layout.addWidget(self.__scrollable_window)
+
+        self.__scroll_area_layout = QVBoxLayout()
+        self.__scroll_area_layout.setAlignment(QtCore.Qt.AlignTop)
+        self.__scroll_area_content = QWidget()
+
+        self.__scroll_area_content.setLayout(self.__scroll_area_layout)
+
+        self.__scrollable_window.setWidget(self.__scroll_area_content)
+
+        self.__add_slider_rc = RemovingCombobox()
+        self.__scroll_area_layout.addWidget(self.__add_slider_rc)
+        self.__add_slider_rc.setMinimumHeight(100)
+        self.__disable_update = False
+
 
 def except_hook(cls, exception, traceback):
     sys.__excepthook__(cls, exception, traceback)
