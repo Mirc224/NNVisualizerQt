@@ -11,6 +11,25 @@ class ClickLabel(QLabel):
         QLabel.mousePressEvent(self, event)
 
 
+class MouseMoveLabel(ClickLabel):
+
+    clicked = QtCore.pyqtSignal(object)
+    mouseRelease = QtCore.pyqtSignal(object)
+    mouseMove = QtCore.pyqtSignal(object)
+
+    def mouseMoveEvent(self, event):
+        self.mouseMove.emit(event)
+        QLabel.mouseMoveEvent(self, event)
+
+    def mousePressEvent(self, event):
+        self.clicked.emit(event)
+        QLabel.mousePressEvent(self, event)
+
+    def mouseReleaseEvent(self, event):
+        self.mouseRelease.emit(event)
+        QLabel.mouseReleaseEvent(self, event)
+
+
 class BackEntry(QLineEdit):
     escPress = QtCore.pyqtSignal()
 
@@ -18,6 +37,7 @@ class BackEntry(QLineEdit):
         if event.key() == QtCore.Qt.Key_Escape:
             self.escPress.emit()
         QLineEdit.keyPressEvent(self, event)
+
 
 class RewritableLabel(QWidget):
     def __init__(self, id=None, label_text='Toto je label', variable_text='Khoko', enter_command=None, entry_width=50,
@@ -38,7 +58,7 @@ class RewritableLabel(QWidget):
         self.__variable_entry = BackEntry()
         self.__variable_entry.setFixedWidth(entry_width)
         # self.__variable_entry.installEventFilter(self)
-        self.__variable_entry.escPress.connect()
+        self.__variable_entry.escPress.connect(self.esc_pressed)
         self.__variable_entry.returnPressed.connect(self.enter_pressed)
         self.__variable_entry.hide()
         self.__variable_label = QLabel(variable_text)
@@ -94,15 +114,6 @@ class RewritableLabel(QWidget):
         if self.__variable_entry.isVisible():
             self.show_variable_label()
 
-    # def eventFilter(self, source, event):
-    #     if self.__variable_entry.isVisible():
-    #         if event.type() == QtCore.QEvent.KeyPress and source is self.__variable_entry:
-    #             if event.key() == QtCore.Qt.Key_Escape:
-    #                 self.show_variable_label()
-    #                 return True
-    #
-    #     return False
-
 
 class RemovingCombobox(QWidget):
     def __init__(self, *args, **kwargs):
@@ -120,12 +131,12 @@ class RemovingCombobox(QWidget):
         self.__backward_values = {}
 
         self.__combobox = QComboBox()
-        layout.setAlignment(QtCore.Qt.AlignHCenter)
-        layout.addWidget(self.__combobox)
+        #layout.setAlignment(QtCore.Qt.AlignHCenter)
+        layout.addWidget(self.__combobox, alignment=QtCore.Qt.AlignBottom)
 
         self.__add_btn = QPushButton('Add')
         self.__add_btn.clicked.connect(self.show_selected)
-        layout.addWidget(self.__add_btn)
+        layout.addWidget(self.__add_btn, alignment=QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
 
         self.__command = None
 
@@ -158,6 +169,8 @@ class RemovingCombobox(QWidget):
 
         self.update_list()
 
+        self.__combobox.adjustSize()
+        self.__add_btn.adjustSize()
         if self.__read_only and self.__default_text != '':
             return self.__ordered_values[1:].copy()
         else:
@@ -182,7 +195,7 @@ class RemovingCombobox(QWidget):
     def show_selected(self):
         selected = self.__combobox.currentText()
         if self.__command is not None and selected in self.__all_values:
-            self.__command(self, (self.__all_values[selected], selected))
+            self.__command((self.__all_values[selected], selected))
 
     def update_list(self):
         visible_list = self.get_list_of_visible()
@@ -281,61 +294,73 @@ class FloatSlider(QSlider):
 class DisplaySlider(QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.setMaximumHeight(55)
+        self.__id = None
+        self.__wrapper_gb = QGroupBox()
+        self.__entry_label_gb = QWidget(self.__wrapper_gb)
+        self._slider = FloatSlider(QtCore.Qt.Horizontal)
+        self.__hide_btn = QPushButton()
+        self.__value_label = ClickLabel(self.__entry_label_gb)
+        self.__value_entry = BackEntry(self.__entry_label_gb)
+        self.initialze_ui()
+
+    def initialze_ui(self):
         v_layout = QVBoxLayout(self)
         v_layout.setSpacing(0)
 
         v_layout.setContentsMargins(0, 0, 0, 0)
-        self.__wrapper_gb = QGroupBox()
         v_layout.addWidget(self.__wrapper_gb)
         self.__wrapper_gb.setTitle('Nadpis')
-        self.__entry_label_gb = QWidget(self.__wrapper_gb)
         dispaly_layout = QVBoxLayout()
         self.__entry_label_gb.setLayout(dispaly_layout)
 
         wrapper_layout = QHBoxLayout()
         self.__wrapper_gb.setLayout(wrapper_layout)
         wrapper_layout.setSpacing(10)
-        wrapper_layout.setContentsMargins(0, 15, 0, 0)
+        wrapper_layout.setContentsMargins(5, 10, 0, 10)
 
-        self.__slider = FloatSlider(QtCore.Qt.Horizontal)
+        wrapper_layout.addWidget(self._slider)
 
-        wrapper_layout.addWidget(self.__slider)
-
-        self.__hide_btn = QPushButton()
         self.__hide_btn.setText('X')
         self.__hide_btn.setStyleSheet('QPushButton { color: red; }')
         self.__hide_btn.setMaximumWidth(20)
         wrapper_layout.addWidget(self.__hide_btn, alignment=QtCore.Qt.AlignRight)
 
-        self.__value_label = ClickLabel(self.__entry_label_gb)
         self.__value_label.setText(self.get_formated_value())
         self.__value_label.adjustSize()
         self.__value_label.clicked.connect(self.show_entry)
 
-        self.__value_entry = BackEntry(self.__entry_label_gb)
         self.__value_entry.hide()
         self.__value_entry.setMaximumWidth(40)
         self.__value_entry.setMaximumHeight(15)
         self.__value_entry.escPress.connect(self.show_label)
         self.__value_entry.returnPressed.connect(self.return_pressed)
 
-        self.__slider.setMaximum(50)
-        self.__slider.setMinimum(10)
-        self.__slider.valueChanged.connect(self.on_value_change)
+        self._slider.setMaximum(50)
+        self._slider.setMinimum(10)
+        self._slider.valueChanged.connect(self.on_value_change)
+
+    def initialize(self, slider_id, minimum=0, maximum=100, slider_name='Slider', on_change_command=None, hide_command=None):
+        self.__id = slider_id
+        self._slider.setMinimum(minimum)
+        self._slider.setMaximum(maximum)
+        self.__wrapper_gb.setTitle(slider_name)
+        if on_change_command is not None:
+            self._slider.valueChanged.connect(lambda: on_change_command(self._slider.value()))
+        if hide_command is not None:
+            self.__hide_btn.clicked.connect(lambda: hide_command(slider_id))
 
     def on_value_change(self):
         self.display_value()
 
     def get_formated_value(self):
-        new_value = str('{0:.2f}'.format(round(self.__slider.value(), 2)))
+        new_value = str('{0:.2f}'.format(round(self._slider.value(), 2)))
         return new_value.rstrip('0').rstrip('.') if '.' in new_value else new_value
 
     def display_value(self):
         self.__value_label.setText(self.get_formated_value())
         self.__value_label.adjustSize()
-        new_x = self.convert_to_pixels(self.__slider.value())
-        self.__entry_label_gb.move(int(new_x), + 12)
+        new_x = self.convert_to_pixels(self._slider.value())
+        self.__entry_label_gb.move(int(new_x), self._slider.y() - 20)
 
     def show_entry(self):
         self.__value_label.hide()
@@ -347,20 +372,19 @@ class DisplaySlider(QWidget):
         self.__value_label.show()
 
     def resizeEvent(self, QResizeEvent):
-        self.display_value()
+        if self._slider is not None:
+            self.display_value()
         super().resizeEvent(QResizeEvent)
 
     def convert_to_pixels(self, value):
-        hodnota = ((value - self.__slider.minimum()) / (self.__slider.maximum() - self.__slider.minimum()))
-        print(hodnota)
-        print(- hodnota * self.__value_label.width() + self.__value_label.width()/2)
-        return hodnota * (self.__slider.width() - self.__value_label.width())
+        hodnota = ((value - self._slider.minimum()) / (self._slider.maximum() - self._slider.minimum()))
+        return hodnota * (self._slider.width() - self.__value_label.width())
 
     def validate_entry(self, ):
         try:
-            if not (self.__slider.minimum() <= float(self.__value_entry.text()) <= self.__slider.maximum()):
+            if not (self._slider.minimum() <= float(self.__value_entry.text()) <= self._slider.maximum()):
                 return False
-            self.__slider.setValue(float(self.__value_entry.text()))
+            self._slider.setValue(float(self.__value_entry.text()))
             return True
         except ValueError:
             return False
@@ -370,12 +394,76 @@ class DisplaySlider(QWidget):
             self.show_variable_label()
 
     def return_pressed(self):
-        print('teraz')
         if self.validate_entry():
             self.show_label()
         else:
             self.__value_entry.setText('err')
 
+    def clear(self):
+        self.__hide_btn.deleteLater()
+        self.__hide_btn.clicked.disconnect()
+        self.__hide_btn = None
+        self._slider.deleteLater()
+        self._slider.valueChanged.disconnect()
+        self._slider = None
+        self.__wrapper_gb.deleteLater()
+        self.__wrapper_gb = None
+        self.deleteLater()
+
     def __del__(self):
         print('mazanie slider')
 
+
+class VariableDisplaySlider(DisplaySlider):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__variable_list = None
+        self.__index = None
+        
+    def set_variable(self, var_list, index):
+        self.__variable_list = var_list
+        self.__index = index
+        self._slider.setValue(self.__variable_list[self.__index])
+
+    def on_value_change(self):
+        if self.__variable_list is not None:
+            self.__variable_list[self.__index] = self._slider.value()
+        super().on_value_change()
+    
+        
+
+# class ResizableWidget(QWidget):
+#     def __init__(self, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+#         self.__layout = QVBoxLayout(self)
+#         label = MouseMoveLabel('Label')
+#         label.clicked.connect(self.on_label_click)
+#         label.mouseRelease.connect(self.on_mouse_release)
+#         label.mouseMove.connect(self.on_mouse_move)
+#         self.__layout.addWidget(label, alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignBottom )
+#         self.setLayout(self.__layout)
+#         self.__start_x = 0
+#         self.__start_y = 0
+#
+#
+#     def on_label_click(self, event):
+#         self.__start_x = event.x()
+#         self.__start_y = event.y()
+#         print('click', event.x(), event.y())
+#
+#     def on_mouse_release(self, event):
+#         print('release')
+#
+#     def on_mouse_move(self, event):
+#         delta_x = self.__start_x - event.x()
+#         delta_y = self.__start_y - event.y()
+#         print(delta_x)
+#         actual_width = self.minimumWidth()
+#         actual_height = self.minimumHeight()
+#         print( 'actual width', actual_width - delta_x)
+#         # self.setMinimumHeight(actual_height - delta_y)
+#         # self.setMinimumWidth(actual_width - delta_x)
+#         self.setFixedSize(actual_width - delta_x, actual_height - delta_y)
+#         self.adjustSize()
+#         self.__start_x = event.x()
+#         self.__start_y = event.y()
