@@ -88,8 +88,8 @@ class GraphPage(QWidget):
 
         self.__logic_layer = GraphLogicLayer(self.__main_graph_frame)
 
-        self.open_model('./modelik.h5')
-        self.load_points('./2d_input.txt')
+        #self.open_model('./modelik.h5')
+        #self.load_points('./2d_input.txt')
 
     def initialize_ui(self):
         vertical_layout = QVBoxLayout()
@@ -114,8 +114,7 @@ class GraphPage(QWidget):
 
         group_wrapper_save = QWidget()
 
-        self.__open_load_info_label = QLabel('Load keras model.')
-        self.__open_load_info_label.setStyleSheet('QLabel { color: orange}')
+        self.__open_load_info_label = QLabel("<font color='orange'>Load keras model.</font>")
 
         font = QtGui.QFont()
         font.setPointSize(10)
@@ -160,8 +159,6 @@ class GraphPage(QWidget):
         ----------------------------------------------------------------------------------------------------------------
         Načítanie vybraného modelu, pokiaľ bola zvolená nejaká cesta k súboru.
         """
-        # self.__open_load_info_label.setText('Try open')
-        # self.__open_load_info_label.setStyleSheet("QLabel { color : red; }")
         file_path = QFileDialog.getOpenFileName(self, 'Load keras model', self.__file_path, 'Keras model (*.h5)')[0]
         if file_path != '':
             self.open_model(file_path)
@@ -196,8 +193,7 @@ class GraphPage(QWidget):
             if file_path != '':
                 self.load_points(file_path)
         else:
-            self.__open_load_info_label.setText('You have to load model first!')
-            self.__open_load_info_label.setStyleSheet("QLabel { color : red; }")
+            self.__open_load_info_label.setText("<font color='red'>You have to load model first!</font>")
 
     def load_points(self, filepath: str):
         """
@@ -213,7 +209,7 @@ class GraphPage(QWidget):
         """
         error_message = self.__logic_layer.load_points(filepath)
         if error_message is not None:
-            self.__open_load_info_label.setText(error_message)
+            self.__open_load_info_label.setText("<font color='red'>{}</font>".format(error_message))
             self.__open_load_info_label.show()
         else:
             self.__open_load_info_label.hide()
@@ -413,7 +409,6 @@ class GraphLogicLayer:
         else:
             intermediate_layer_mode = keras.Model(inputs=self.__keras_model.input,
                                                   outputs=self.__keras_layers[layer_number - 1].output)
-            print(intermediate_layer_mode.predict(input_points))
             return intermediate_layer_mode.predict(input_points)
 
     def set_points_for_layer(self, layer_number):
@@ -601,7 +596,7 @@ class GraphLogicLayer:
                 self.__main_graph_frame.apply_changes_on_options_frame()
                 return None
             else:
-                return 'Diffrent input point dimension!'
+                return 'Different input point dimension!'
         else:
             return 'No Keras model loaded!'
 
@@ -700,9 +695,13 @@ class MainGraphFrame(QWidget):
 
         self.__graph_area_layout = QHBoxLayout()
 
+        self.__options_frame = OptionsFrame()
+
         self.__add_remove_layer_rc = RemovingCombobox()
 
         self.initialize_ui()
+
+        self.__options_frame.hide_option_bar()
 
         # layer_graph.clear()
         #layer_graph.hide()
@@ -713,12 +712,13 @@ class MainGraphFrame(QWidget):
         horizontal_layout.setContentsMargins(0, 0, 5, 0)
         horizontal_layout.setSpacing(0)
 
-        options_frame = OptionsFrame()
-        options_frame.setMaximumWidth(300)
+        self.__options_frame.setFixedWidth(320)
+        self.__options_frame.setSizePolicy(Qt.QSizePolicy.Minimum, Qt.QSizePolicy.Minimum)
 
         self.scrollable_frame.setWidgetResizable(True)
-        horizontal_layout.addWidget(options_frame)
+        horizontal_layout.addWidget(self.__options_frame, alignment=QtCore.Qt.AlignLeft)
         horizontal_layout.addWidget(self.scrollable_frame)
+        self.__options_frame.adjustSize()
 
         self.__graph_area_layout.setContentsMargins(0, 0, 0, 0)
         self.__graph_area_layout.setSpacing(0)
@@ -749,7 +749,7 @@ class MainGraphFrame(QWidget):
         :param neural_layers: zoznam NeuralLayer, ktoré bude možné zobraziť.
         :param active_layer:  refenrencia na zoznam aktívnych vrstiev.
         """
-        #self.__options_frame.initialize()
+        self.__options_frame.initialize()
 
         # Vyčistenie slovníkov.
         self.__logic_layer = logic_layer
@@ -780,8 +780,8 @@ class MainGraphFrame(QWidget):
         else:
             self.__add_remove_layer_rc.hide()
 
-        # first_layer_tuple = (self.__neural_layers[0].layer_number, self.__neural_layers[0].layer_name)
-        # self.show_layer(first_layer_tuple)
+        first_layer_tuple = (self.__neural_layers[0].layer_number, self.__neural_layers[0].layer_name)
+        self.show_layer(first_layer_tuple)
 
     def show_layer(self, layer_tuple: tuple):
         """
@@ -843,6 +843,8 @@ class MainGraphFrame(QWidget):
             self.__add_remove_layer_rc.show_item(layer_name)
             if len(self.__active_layers) < self.__number_of_layers:
                 self.__add_remove_layer_rc.show()
+            if self.__options_frame.active_layer == layer:
+                self.__options_frame.hide_option_bar()
 
     def show_layer_options_frame(self, layer_number):
         if 0 <= layer_number < self.__number_of_layers:
@@ -850,7 +852,6 @@ class MainGraphFrame(QWidget):
             self.__options_frame.initialize_with_layer_config(layer, layer.config)
 
     def apply_changes_on_options_frame(self):
-        return
         self.__options_frame.update_selected_config()
 
     def update_active_options_layer(self, start_layer):
@@ -1083,7 +1084,6 @@ class NeuralLayer:
         number_of_components = t_sne_config['used_config']['n_components']
         tsne = TSNE(**t_sne_config['used_config'])
         transformed_cords = tsne.fit_transform(points_cords).transpose()
-        print(transformed_cords)
         self.__points_method_cords = transformed_cords
 
     def clear(self):
@@ -1094,15 +1094,7 @@ class NeuralLayer:
         '''
         if self.__visible:
             self.__graph_frame.clear()
-            self.__layer_options_container.destroy()
-            self.__options_button.destroy()
-            self.__layer_wrapper.clear()
-            self.__hide_button.destroy()
             self.__layer_options_container = None
-            self.__options_button = None
-            self.__layer_wrapper = None
-            self.__hide_button = None
-            self.__visible = False
 
     def signal_change(self):
         self.__logic_layer.signal_change_on_layer(self.__layer_number)
@@ -1119,6 +1111,7 @@ class NeuralLayer:
             self.__graph_frame.redraw_graph()
 
     def use_config(self):
+        print('pouzivam config')
         if self.__visible:
             if self.__layer_config['apply_changes']:
                 print('zmenene')
@@ -1228,6 +1221,10 @@ class NeuralLayer:
     @graph_frame.setter
     def graph_frame(self, value):
         self.__graph_frame = value
+        if self.__graph_frame is not None:
+            self.__visible = True
+        else:
+            self.__visible = False
 
 
 class OptionsFrame(QWidget):
@@ -1298,8 +1295,33 @@ class OptionsFrame(QWidget):
         self.__tSNE_parameters_dict = {}
         self.__changed_config = None
         self.__active_layer = None
+        self.__layer_name_label = QLabel('Layer name')
+        self.__bar_wrapper = QGroupBox('Layer Options')
+        self.__choose_cords_gbox = QGroupBox('Choose Cords')
+        self.__possible_cords_label = QLabel('Possible Cords')
+        self.__choose_label_gbox = QGroupBox('Label names')
+        self.__graph_view_gbox = QGroupBox('Graph view options')
+        self.__color_labels_cb = QCheckBox('Color labels')
+        self.__lock_view_cb = QCheckBox('Lock view')
+        self.__3d_view_cb = QCheckBox('3D view')
+        self.__show_polygon_cb = QCheckBox('Show polygon')
+        self.__dim_reduction_gbox = QGroupBox('Dimension reduction')
+        self.__actual_used_reduction_method = QLabel('Actual used: No method')
+        self.__no_method_rb = QRadioButton('No method')
+        self.__PCA_rb = QRadioButton('PCA')
+        self.__t_SNE_rb = QRadioButton('t-SNE')
+        self.__pca_info_gbox = QGroupBox('PCA information')
+        self.__var_expl_lb = QListWidget()
+        self.__load_scores_lb = QListWidget()
+        self.__t_sne_parameter_gbox = QGroupBox('t-SNE parameters')
+        self.__use_method_btn = QPushButton()
+        self.__currently_used_method = 'No method'
+
+        self.initialize_ui()
 
         # Obalovaci element. Ostáva stále zobrazený.
+
+    def initialize_ui(self):
         main_layout = QVBoxLayout()
         main_layout.setSpacing(0)
         main_layout.setContentsMargins(5, 0, 5, 5)
@@ -1309,7 +1331,6 @@ class OptionsFrame(QWidget):
         options_groups_layout.setSpacing(0)
         options_groups_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.__layer_name_label = QLabel('Layer name')
         self.__layer_name_label.setMargin(10)
 
         layer_name_font = QtGui.QFont()
@@ -1319,14 +1340,12 @@ class OptionsFrame(QWidget):
 
         options_groups_layout.addWidget(self.__layer_name_label, alignment=QtCore.Qt.AlignCenter)
 
-        self.__bar_wrapper = QGroupBox('Layer Options')
         self.__bar_wrapper.setLayout(options_groups_layout)
         main_layout.addWidget(self.__bar_wrapper)
 
         choose_cords_layout = QVBoxLayout()
         choose_cords_layout.setAlignment(QtCore.Qt.AlignTop)
 
-        self.__choose_cords_gbox = QGroupBox('Choose Cords')
         self.__choose_cords_gbox.setLayout(choose_cords_layout)
 
         options_groups_layout.addWidget(self.__choose_cords_gbox)
@@ -1334,59 +1353,52 @@ class OptionsFrame(QWidget):
         options_group_title_font = QtGui.QFont()
         options_group_title_font.setPointSize(10)
 
-        self.__possible_cords_label = QLabel('Possible Cords')
         # self.__possible_cords_label.setFont(options_group_title_font)
         self.__possible_cords_label.setContentsMargins(0, 0, 0, 0)
 
         choose_cords_layout.addWidget(self.__possible_cords_label, alignment=QtCore.Qt.AlignHCenter)
 
-        entry_names = ['Axis X:', 'Axis Y:', 'Axis Z:']
-        for i in range(3):
-            rw_label = RewritableLabel(i, entry_names[i], str(0))
-            choose_cords_layout.addWidget(rw_label, alignment=QtCore.Qt.AlignLeft)
-            self.__cords_entries_list.append(rw_label)
-
-        self.__choose_label_gbox = QGroupBox('Label names')
         options_groups_layout.addWidget(self.__choose_label_gbox)
         choose_labels_layout = QVBoxLayout()
         self.__choose_label_gbox.setLayout(choose_labels_layout)
         choose_labels_layout.setAlignment(QtCore.Qt.AlignTop)
 
-        entry_names = ['X axis label:', 'Y axis label:', 'Z axis label:']
-        entry_values = ['Label X', 'Label Y', 'Label Z']
+        label_entry_names = ['X axis label:', 'Y axis label:', 'Z axis label:']
+        label_entry_values = ['Label X', 'Label Y', 'Label Z']
+        cords_entry_names = ['Axis X:', 'Axis Y:', 'Axis Z:']
         for i in range(3):
-            rw_label = RewritableLabel(i, entry_names[i], entry_values[i])
+            rw_label = RewritableLabel(i, cords_entry_names[i], str('-'), self.validate_cord_entry)
+            choose_cords_layout.addWidget(rw_label, alignment=QtCore.Qt.AlignLeft)
+            self.__cords_entries_list.append(rw_label)
+            rw_label = RewritableLabel(i, label_entry_names[i], label_entry_values[i], self.validate_label_entry)
             choose_labels_layout.addWidget(rw_label, alignment=QtCore.Qt.AlignLeft)
             self.__labels_entries_list.append(rw_label)
 
-        self.__graph_view_gbox = QGroupBox('Graph view options')
         options_groups_layout.addWidget(self.__graph_view_gbox)
 
         view_options_layout = QVBoxLayout()
         self.__graph_view_gbox.setLayout(view_options_layout)
         view_options_layout.setAlignment(QtCore.Qt.AlignTop)
 
-        self.__graph_view_gbox.setStyleSheet('QCheckBox { font-size: 8pt;};')
-        self.__color_labels_cb = QCheckBox('Color labels')
+        self.__color_labels_cb.toggled.connect(self.on_color_label_check)
+        self.__lock_view_cb.toggled.connect(self.on_lock_view_check)
+        self.__3d_view_cb.toggled.connect(self.on_3d_graph_check)
+        self.__show_polygon_cb.toggled.connect(self.on_show_polygon_check)
+
         view_options_layout.addWidget(self.__color_labels_cb)
-        self.__lock_view_cb = QCheckBox('Lock view')
         view_options_layout.addWidget(self.__lock_view_cb)
-        self.__3d_view_cb = QCheckBox('3D view')
         view_options_layout.addWidget(self.__3d_view_cb)
-        self.__show_polygon_cb = QCheckBox('Show polygon')
         view_options_layout.addWidget(self.__show_polygon_cb)
 
-
-        self.__dim_reduction_gbox = QGroupBox('Dimension reduction')
         options_groups_layout.addWidget(self.__dim_reduction_gbox)
         dim_reduction_layout = QVBoxLayout()
         dim_reduction_layout.setContentsMargins(0, 0, 0, 0)
         dim_reduction_layout.setAlignment(QtCore.Qt.AlignTop)
         self.__dim_reduction_gbox.setLayout(dim_reduction_layout)
 
-        self.__actual_used_reduction_method = QLabel('Actual used: No method')
         self.__actual_used_reduction_method.setMargin(10)
-        dim_reduction_layout.addWidget(self.__actual_used_reduction_method, alignment=QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop )
+        dim_reduction_layout.addWidget(self.__actual_used_reduction_method,
+                                       alignment=QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
 
         radio_button_group = QButtonGroup()
         radio_button_layout = QHBoxLayout()
@@ -1394,20 +1406,20 @@ class OptionsFrame(QWidget):
         radio_button_layout.setAlignment(QtCore.Qt.AlignLeft)
         dim_reduction_layout.addLayout(radio_button_layout)
 
-        self.__no_method_rb = QRadioButton('No method')
+        self.__no_method_rb.toggled.connect(self.on_method_change)
+        self.__PCA_rb.toggled.connect(self.on_method_change)
+        self.__t_SNE_rb.toggled.connect(self.on_method_change)
+
         self.__no_method_rb.setChecked(True)
         radio_button_group.addButton(self.__no_method_rb)
         radio_button_layout.addWidget(self.__no_method_rb)
 
-        self.__PCA_rb = QRadioButton('PCA')
         radio_button_group.addButton(self.__PCA_rb)
         radio_button_layout.addWidget(self.__PCA_rb)
 
-        self.__t_SNE_rb = QRadioButton('t-SNE')
         radio_button_group.addButton(self.__t_SNE_rb)
         radio_button_layout.addWidget(self.__t_SNE_rb)
 
-        self.__pca_info_gbox = QGroupBox('PCA information')
         self.__pca_info_gbox.setMaximumHeight(200)
         dim_reduction_layout.addWidget(self.__pca_info_gbox, alignment=QtCore.Qt.AlignTop)
 
@@ -1422,9 +1434,9 @@ class OptionsFrame(QWidget):
         #
         layout_var_expl = QVBoxLayout()
         layout_var_expl.setAlignment(QtCore.Qt.AlignTop)
-        self.__var_expl_lb = QListWidget()
         layout_var_expl.setContentsMargins(0, 0, 0, 0)
         var_expl_gbox.setLayout(layout_var_expl)
+        self.__var_expl_lb.setMaximumWidth(150)
         layout_var_expl.addWidget(self.__var_expl_lb)
 
         loading_score_gbox = QGroupBox('Loading scores')
@@ -1434,10 +1446,9 @@ class OptionsFrame(QWidget):
         loading_score_layout.setAlignment(QtCore.Qt.AlignTop)
         loading_score_gbox.setLayout(loading_score_layout)
         loading_score_layout.setContentsMargins(0, 0, 0, 0)
-        self.__load_scores_lb = QListWidget()
+        self.__load_scores_lb.setMaximumWidth(150)
         loading_score_layout.addWidget(self.__load_scores_lb)
 
-        self.__t_sne_parameter_gbox = QGroupBox('t-SNE parameters')
         dim_reduction_layout.addWidget(self.__t_sne_parameter_gbox, alignment=QtCore.Qt.AlignTop)
         t_sne_par_layout = QVBoxLayout()
         t_sne_par_layout.setAlignment(QtCore.Qt.AlignTop)
@@ -1448,10 +1459,13 @@ class OptionsFrame(QWidget):
                                  'Number of iteration:']
 
         for i in range(len(t_sne_parameter_id_list)):
-            t_sne_parameter_rw = RewritableLabel(t_sne_parameter_id_list[i], t_sne_parameter_label[i], '-', None)
+            t_sne_parameter_rw = RewritableLabel(t_sne_parameter_id_list[i], t_sne_parameter_label[i], '-', self.validate_t_sne_entry)
             t_sne_par_layout.addWidget(t_sne_parameter_rw, alignment=QtCore.Qt.AlignLeft)
             self.__tSNE_parameters_dict[t_sne_parameter_id_list[i]] = t_sne_parameter_rw
 
+        self.__use_method_btn.setText('Use method')
+        dim_reduction_layout.addWidget(self.__use_method_btn)
+        self.__use_method_btn.clicked.connect(self.use_selected_method)
 
     def initialize(self):
         """
@@ -1461,13 +1475,261 @@ class OptionsFrame(QWidget):
         """
         self.__changed_config = None
         self.__active_layer = None
-        self.hide_all()
+        self.hide_option_bar()
 
-    def initialize_according_to_config(self):
-        pass
+    def initialize_with_layer_config(self, neural_layer, config):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Nastavenie aktuálnej aktívnej vrstvy a configu tejto vrstvy.
 
-    def clear_bar(self):
+        Parametre
+        ----------------------------------------------------------------------------------------------------------------
+        :param neural_layer: odkaz na aktívnu vrstvu, pre ktorú sú menené nastavenia a ktoré budú následne na túto
+                             vrstvu použité
+        :param config: odkaz na config aktuálne zobrazovanej a upravovanej vrstvy
+        """
+        self.__active_layer = neural_layer
+        self.__changed_config = config
+        self.update_selected_config()
+
+    def initialize_label_options(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Nastavenie jednotlivých vstupov pre časť s názvami os grafov na základe načítaného configu.
+        """
+        number_of_possible_dim = self.__changed_config['max_visible_dim']
+        for i in range(number_of_possible_dim):
+            label_entry = self.__labels_entries_list[i]
+            label_entry.set_variable_label(self.__changed_config['axis_labels'][i])
+            label_entry.show()
+
+    def initialize_view_options(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Nastavenie hodnôt jednotlivých vstupov pre časť s možnosťami zobrazovania grafu na základe načítaného configu.
+        """
+        self.__color_labels_cb.setChecked(self.__changed_config['color_labels'])
+        self.__lock_view_cb.setChecked(self.__changed_config['locked_view'])
+
+        number_of_possible_dim = self.__changed_config['max_visible_dim']
+
+        if number_of_possible_dim >= 3:
+            self.__3d_view_cb.setChecked(self.__changed_config['draw_3d'])
+            self.__3d_view_cb.show()
+
+        if self.__changed_config['possible_polygon']:
+            self.__show_polygon_cb.setChecked(self.__changed_config['show_polygon'])
+            self.__show_polygon_cb.show()
+
+    def initialize_dimension_reduction_options(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Nastavenie hodnôt jednotlivých vstuov pre časť s možnosťami pre redukciu priestoru.
+        """
+        self.set_actual_method_lable(self.__currently_used_method)
+        config_selected_method = self.__changed_config['config_selected_method']
+
+        self.__no_method_rb.setChecked(False)
+        self.__PCA_rb.setChecked(False)
+        self.__t_SNE_rb.setChecked(False)
+
+        if config_selected_method == 'No method':
+            self.__no_method_rb.setChecked(True)
+        elif config_selected_method == 'PCA':
+            self.__PCA_rb.setChecked(True)
+        elif config_selected_method == 't-SNE':
+            self.__t_SNE_rb.setChecked(True)
+
+        if self.__currently_used_method == 'PCA':
+            self.update_PCA_information()
+
+        self.initialize_t_sne_parameters()
+        self.on_method_change()
+
+    def initialize_t_sne_parameters(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Predvyplnenie parametrov pre metódu t-SNE.
+        """
+        t_sne_config = self.__changed_config['t_SNE_config']
+        actual_used_config = t_sne_config['used_config']
+        options_config = t_sne_config['options_config']
+        number_of_components = t_sne_config['parameter_borders']['n_components'][2]
+        self.__tSNE_parameters_dict['n_components'].set_label_name(f'Number of components (max {number_of_components}):')
+        for key in self.__tSNE_parameters_dict:
+            rewritable_label = self.__tSNE_parameters_dict[key]
+            rewritable_label.set_variable_label(options_config[key])
+
+            # Ak sa aktuálne používaná hodnota parametra nerovná naposledy nastavenej hodnote parametra je tento
+            # parameter označený ako zmenený no ešte nepoužitý.
+            if actual_used_config[key] == options_config[key]:
+                rewritable_label.set_mark_changed(False)
+            else:
+                rewritable_label.set_mark_changed(True)
+
+    def use_selected_method(self):
+        if self.__active_layer is not None:
+            method = self.get_checked_method()
+            need_recalculation = False
+            if method == 't-SNE':
+                need_recalculation = self.apply_t_SNE_options_if_changed()
+
+            if method != self.__changed_config['used_method']:
+                need_recalculation = True
+                self.__changed_config['used_method'] = self.__currently_used_method = method
+            if need_recalculation:
+                self.__changed_config['apply_changes'] = True
+                self.__active_layer.use_config()
+                self.set_actual_method_lable(method)
+
+                # Hide all informations
+                self.hide_all_methods_information()
+                if method == 'PCA':
+                    self.update_PCA_information()
+                    self.__pca_info_gbox.show()
+                elif method == 't-SNE':
+                    self.__t_sne_parameter_gbox.show()
+
+                self.set_actual_method_lable(method)
+            self.set_cords_entries_according_chosen_method()
+
+    def update_active_options_layer(self, start_layer=-1):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Zobrazenie aktuálnych informácií pre aktívnu vrstvu, ktorej možnosti sú zobrazované.
+
+        Parametre
+        ----------------------------------------------------------------------------------------------------------------
+        :param start_layer: poradové číslo najnižšej vrstvy, pri ktorej došlo ku zmene, ak je číslo menšie ako poradové
+                            číslo aktívnej vrstvy, ktorej možnosti sú zobrazované, sú tieto možnosti aktualizované,
+                            pretože mohlo dôjsť k zmenám v možných parametroch, prípadne k zmene hodnôt v rámci PCA.
+        """
+        if self.__active_layer is not None and self.__changed_config is not None:
+            actual_method = self.__changed_config['used_method']
+            if actual_method == 'PCA' and start_layer < self.__active_layer.layer_number:
+                self.update_PCA_information()
+
+    def update_selected_config(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Nastavenie jednotlivých možností na základe configu aktívnej vrstvy.
+        """
+        if self.__active_layer is not None and self.__changed_config is not None:
+            self.__currently_used_method = self.__changed_config['used_method']
+            self.hide_option_bar()
+            self.__bar_wrapper.show()
+            self.__layer_name_label.setText(str(self.__changed_config['layer_name']))
+
+            self.set_cords_entries_according_chosen_method()
+            self.initialize_label_options()
+            self.initialize_view_options()
+            self.initialize_dimension_reduction_options()
+
+    def update_PCA_information(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Vypísanie aktuálnych informácii o PCA.
+        """
+        variance_series = self.__changed_config['PCA_config']['percentage_variance']
+        if variance_series is not None:
+            self.__var_expl_lb.clear()
+            pc_labels = variance_series.index
+            for i, label in enumerate(pc_labels):
+                self.__var_expl_lb.insertItem(i, '{}: {:.2f}%'.format(label, round(variance_series[label], 2)))
+            loading_scores = self.__changed_config['PCA_config']['largest_influence']
+
+            self.__load_scores_lb.clear()
+            # Zoradenie významností jednotlivých neurónov pri PCA
+            sorted_loading_scores = loading_scores.abs().sort_values(ascending=False)
+            sorted_indexes = sorted_loading_scores.index.values
+            for i, label in enumerate(sorted_indexes):
+                self.__load_scores_lb.insertItem(i, '{}: {:.4f}'.format(label, round(loading_scores[label], 4)))
+
+    def update_active_options_layer(self, start_layer=-1):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Zobrazenie aktuálnych informácií pre aktívnu vrstvu, ktorej možnosti sú zobrazované.
+
+        Parametre
+        ----------------------------------------------------------------------------------------------------------------
+        :param start_layer: poradové číslo najnižšej vrstvy, pri ktorej došlo ku zmene, ak je číslo menšie ako poradové
+                            číslo aktívnej vrstvy, ktorej možnosti sú zobrazované, sú tieto možnosti aktualizované,
+                            pretože mohlo dôjsť k zmenám v možných parametroch, prípadne k zmene hodnôt v rámci PCA.
+        """
+        if self.__active_layer is not None and self.__changed_config is not None:
+            actual_method = self.__changed_config['used_method']
+            if actual_method == 'PCA' and start_layer < self.__active_layer.layer_number:
+                self.update_PCA_information()
+
+    def apply_t_SNE_options_if_changed(self):
+        changed = False
+        if self.__changed_config is not None:
+            t_sne_config = self.__changed_config['t_SNE_config']
+            used_config = t_sne_config['used_config']
+            options_config = t_sne_config['options_config']
+            for key in used_config:
+                if used_config[key] != options_config[key]:
+                    changed = True
+                    used_config[key] = options_config[key]
+            if changed:
+                t_sne_config['displayed_cords'] = list(range(used_config['n_components']))
+                self.set_entries_not_marked(self.__tSNE_parameters_dict.values())
+        return changed
+
+    def set_cords_entries_according_chosen_method(self):
+        if self.__currently_used_method == 'No method':
+            entry_names = ['Axis X:', 'Axis Y:', 'Axis Z:']
+            cords_label_text = 'Possible cords: 0-{}'.format(self.__changed_config['number_of_dimensions']-1)
+            displayed_cords = self.__changed_config['no_method_config']['displayed_cords']
+            possible_cords = self.__changed_config['max_visible_dim']
+        elif self.__currently_used_method == 'PCA':
+            entry_names = ['PC axis X:', 'PC axis Y:', 'PC axis Z:']
+            number_of_pcs = min(self.__changed_config['number_of_dimensions'],
+                                self.__changed_config['number_of_samples'])
+            if number_of_pcs == 0:
+                cords_label_text = 'No possible PCs:'
+            else:
+                cords_label_text = 'Possible PCs: 1-{}'.format(number_of_pcs)
+            possible_cords = min(number_of_pcs, self.__changed_config['max_visible_dim'])
+            displayed_cords = self.__changed_config['PCA_config']['displayed_cords'].copy()
+            displayed_cords = np.array(displayed_cords) + 1
+        elif self.__currently_used_method == 't-SNE':
+            entry_names = ['t-SNE X:', 't-SNE Y:', 't-SNE Z:']
+            possible_cords = self.__changed_config['t_SNE_config']['used_config']['n_components']
+            cords_label_text = 'Possible t-SNE components: 0-{}'.format(possible_cords - 1)
+            displayed_cords = self.__changed_config['t_SNE_config']['displayed_cords'].copy()
+        self.set_cords_entries(entry_names, cords_label_text, displayed_cords, possible_cords)
+
+    def set_cords_entries(self, entry_name, cords_label_text, displayed_cords, possible_cords):
+        self.hide_choose_cords_entries()
+        self.__possible_cords_label.setText(str(cords_label_text))
+        for i in range(possible_cords):
+            cord_entry_rewritable_label = self.__cords_entries_list[i]
+            cord_entry_rewritable_label.set_label_name(entry_name[i])
+            cord_entry_rewritable_label.set_variable_label(displayed_cords[i])
+            cord_entry_rewritable_label.show()
+
+    def set_actual_method_lable(self, method_name):
+        self.__actual_used_reduction_method.setText(str(f'Actual used: {method_name}'))
+
+    def set_entries_not_marked(self, entries_list):
+        for entry in entries_list:
+            entry.set_mark_changed(False)
+
+    def hide_option_bar(self):
         self.__bar_wrapper.hide()
+        self.hide_option_bar_items()
+
+    def hide_option_bar_items(self):
         self.hide_choose_cords_entries()
         self.hide_label_entries()
         self.hide_graph_view_options()
@@ -1491,6 +1753,121 @@ class OptionsFrame(QWidget):
     def hide_all_methods_information(self):
         self.__pca_info_gbox.hide()
         self.__t_sne_parameter_gbox.hide()
+
+    def on_method_change(self):
+        print('zmena metody')
+        if self.__changed_config:
+            method = self.get_checked_method()
+            self.__changed_config['config_selected_method'] = method
+            if method == 'PCA':
+                if self.__changed_config['used_method'] == method:
+                    self.__pca_info_gbox.show()
+                self.__t_sne_parameter_gbox.hide()
+            elif method == 't-SNE':
+                self.__pca_info_gbox.hide()
+                self.__t_sne_parameter_gbox.show()
+            else:
+                self.__pca_info_gbox.hide()
+                self.__t_sne_parameter_gbox.hide()
+
+    def on_color_label_check(self):
+        if self.__changed_config:
+            self.__changed_config['color_labels'] = self.__color_labels_cb.isChecked()
+            self.__active_layer.use_config()
+
+    def on_lock_view_check(self):
+        if self.__changed_config:
+            self.__changed_config['locked_view'] = self.__lock_view_cb.isChecked()
+            self.__active_layer.use_config()
+
+    def on_show_polygon_check(self):
+        if self.__changed_config:
+            self.__changed_config[
+                'show_polygon'] = self.__active_layer.calculate_polygon = self.__show_polygon_cb.isChecked()
+            if self.__changed_config['show_polygon']:
+                self.__active_layer.set_polygon_cords()
+            self.__active_layer.use_config()
+
+    def on_3d_graph_check(self):
+        if self.__changed_config:
+            self.__changed_config['draw_3d'] = self.__3d_view_cb.isChecked()
+            self.__active_layer.use_config()
+
+    def validate_label_entry(self, id, value):
+        self.__labels_entries_list[id].set_variable_label(value)
+        self.__labels_entries_list[id].show_variable_label()
+        self.__changed_config['axis_labels'][id] = value
+        self.__active_layer.use_config()
+
+    def validate_cord_entry(self, id, value):
+        try:
+            bottom_border = 0
+            top_border = 0
+            changed_cords = None
+            if self.__currently_used_method == 'No method':
+                bottom_border = 0
+                top_border = self.__changed_config['number_of_dimensions']
+                changed_cords = self.__changed_config['no_method_config']['displayed_cords']
+                new_value = int(value)
+            elif self.__currently_used_method == 'PCA':
+                bottom_border = 1
+                top_border = min(self.__changed_config['number_of_dimensions'], self.__changed_config['number_of_samples']) + 1
+                changed_cords = self.__changed_config['PCA_config']['displayed_cords']
+                new_value = int(value) - 1
+            elif self.__currently_used_method == 't-SNE':
+                bottom_border = 0
+                top_border = self.__changed_config['t_SNE_config']['used_config']['n_components']
+                changed_cords = self.__changed_config['t_SNE_config']['displayed_cords']
+                new_value = int(value)
+
+            if not (bottom_border <= int(value) < top_border):
+                self.__cords_entries_list[id].set_entry_text('err')
+                return False
+
+            self.__cords_entries_list[id].set_variable_label(value)
+            self.__cords_entries_list[id].show_variable_label()
+            changed_cords[id] = int(new_value)
+            self.__changed_config['cords_changed'] = True
+            self.__active_layer.use_config()
+            return True
+        except ValueError:
+            self.__cords_entries_list[id].set_entry_text('err')
+            return False
+
+    def validate_t_sne_entry(self, id, value):
+        try:
+            if self.__changed_config is not None:
+                test_tuple = self.__changed_config['t_SNE_config']['parameter_borders'][id]
+                if not (test_tuple[0] <= test_tuple[1](value) <= test_tuple[2]):
+                    self.__tSNE_parameters_dict[id].set_entry_text('err')
+                    return False
+                parameter_label = self.__tSNE_parameters_dict[id]
+                parameter_label.set_variable_label(value)
+                parameter_label.show_variable_label()
+                self.__changed_config['t_SNE_config']['options_config'][id] = test_tuple[1](value)
+                if self.__changed_config['t_SNE_config']['options_config'][id] == self.__changed_config['t_SNE_config']['used_config'][id]:
+                    parameter_label.set_mark_changed(False)
+                else:
+                    parameter_label.set_mark_changed(True)
+                return True
+            else:
+                return False
+        except ValueError:
+            self.__tSNE_parameters_dict[id].set_entry_text('err')
+            return False
+
+    def get_checked_method(self):
+        if self.__no_method_rb.isChecked():
+            return 'No method'
+        elif self.__PCA_rb.isChecked():
+            return 'PCA'
+        elif self.__t_SNE_rb.isChecked():
+            return 't-SNE'
+        return None
+
+    @property
+    def active_layer(self):
+        return self.__active_layer
 
 
 class GraphFrame(QFrame):
@@ -1560,10 +1937,25 @@ class GraphFrame(QFrame):
 
     def clear(self):
         self.__graph.clear()
+        self.__graph = None
+        self.__weight_controller.clear()
+        self.__graph = None
         self.deleteLater()
+        gc.collect()
 
     def require_graphs_redraw(self):
         self.__neural_layer.require_graphs_redraw()
+
+    def apply_config(self, config):
+        if config['used_method'] == 'No method':
+            self.__graph.draw_polygon = config['show_polygon']
+        else:
+            self.__graph.draw_polygon = False
+        self.__graph.locked_view = config['locked_view']
+        self.__graph.graph_labels = config['axis_labels']
+        self.__graph.is_3d_graph = config['draw_3d']
+        self.__graph.set_color_label(config['color_labels'])
+        self.redraw_graph()
 
     def __del__(self):
         print('mazanie graph frame')
@@ -1994,17 +2386,18 @@ class LayerWeightControllerFrame(QWidget):
     def create_weight_slider(self, start_neuron: int, end_neuron: int):
         slider_name = 'Vaha {}-{}'.format(start_neuron, end_neuron)
         slider = VariableDisplaySlider()
-        slider.initialize(slider_name, -1, 1, slider_name, self.on_slider_change, self.remove_slider)
-        slider.set_variable(self.__weights_reference[start_neuron], end_neuron)
+        slider.initialize(slider_name, -1, 1, slider_name, self.on_slider_change, self.remove_slider,
+                          self.__weights_reference[start_neuron], end_neuron)
         self.__scroll_area_layout.insertWidget(self.__scroll_area_layout.count()-1, slider)
+        slider.adjustSize()
         self.__active_slider_dict[slider_name] = slider
         self.addSlider_visibility_test()
 
     def create_bias_slider(self, end_neuron: int):
         slider_name = 'Bias {}'.format(end_neuron)
         slider = VariableDisplaySlider()
-        slider.initialize(slider_name, -1, 1, slider_name, self.on_slider_change, self.remove_slider)
-        slider.set_variable(self.__bias_reference, end_neuron)
+        slider.initialize(slider_name, -1, 1, slider_name, self.on_slider_change, self.remove_slider,
+                          self.__bias_reference, end_neuron)
         self.__scroll_area_layout.insertWidget(self.__scroll_area_layout.count() - 1, slider)
         self.__active_slider_dict[slider_name] = slider
         self.addSlider_visibility_test()
@@ -2038,6 +2431,13 @@ class LayerWeightControllerFrame(QWidget):
 
     def on_slider_change(self, value):
         self.__controller.wight_bias_change_signal()
+
+    def clear(self):
+        for slider in self.__active_slider_dict:
+            slider.clear()
+        self.__active_slider_dict = {}
+        self.__add_slider_rc.clear()
+        self.__add_slider_rc = None
 
 def except_hook(cls, exception, traceback):
     sys.__excepthook__(cls, exception, traceback)

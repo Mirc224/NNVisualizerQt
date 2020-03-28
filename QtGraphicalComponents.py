@@ -1,4 +1,4 @@
-from PyQt5 import QtCore
+from PyQt5 import QtCore, Qt
 from PyQt5 import QtGui
 from PyQt5.QtWidgets import *
 
@@ -52,6 +52,7 @@ class RewritableLabel(QWidget):
         self.__mark_changed = False
 
         self.__name_label = QLabel(self.__name_variable)
+        self.__name_label.setObjectName('label_name')
 
         self.__enter_function = enter_command
 
@@ -86,13 +87,13 @@ class RewritableLabel(QWidget):
 
     def set_label_name(self, name):
         self.__name_variable = name + ' '
-        self.__name_label.setText(self.__name_variable)
+        self.__name_label.setText(str(self.__name_variable))
 
     def set_entry_text(self, text=''):
-        self.__variable_entry.setText(text)
+        self.__variable_entry.setText(str(text))
 
     def set_variable_label(self, value):
-        self.__variable_label.text(value)
+        self.__variable_label.setText(str(value))
 
     def show_variable_label(self):
         self.__variable_entry.hide()
@@ -104,11 +105,9 @@ class RewritableLabel(QWidget):
     def set_mark_changed(self, value):
         self.__mark_changed = value
         if self.__mark_changed:
-            self.__name_label.text(self.__name_variable[:-1] + "*")
-            self.__name_label.styleSheet('color: red')
+            self.__name_label.setText("<font color='red'>{}</font>".format(str(self.__name_variable[:-1] + "*")))
         else:
-            self.__name_label.text(self.__name_variable)
-            self.__name_label.styleSheet('color: black')
+            self.__name_label.setText("<font color='black'>{}</font>".format(str(self.__name_variable)))
 
     def esc_pressed(self):
         if self.__variable_entry.isVisible():
@@ -131,6 +130,7 @@ class RemovingCombobox(QWidget):
         self.__backward_values = {}
 
         self.__combobox = QComboBox()
+        #self.__combobox.setSizePolicy(Qt.QSizePolicy.Expanding, Qt.QSizePolicy.Preferred)
         #layout.setAlignment(QtCore.Qt.AlignHCenter)
         layout.addWidget(self.__combobox, alignment=QtCore.Qt.AlignBottom)
 
@@ -150,7 +150,7 @@ class RemovingCombobox(QWidget):
 
         self.__combobox.clear()
 
-        self.__add_btn.setText(button_text)
+        self.__add_btn.setText(str(button_text))
         self.__read_only = read_only
         self.__default_text = default_text
         if self.__read_only:
@@ -169,7 +169,7 @@ class RemovingCombobox(QWidget):
 
         self.update_list()
 
-        self.__combobox.adjustSize()
+        #self.__combobox.adjustSize()
         self.__add_btn.adjustSize()
         if self.__read_only and self.__default_text != '':
             return self.__ordered_values[1:].copy()
@@ -255,6 +255,8 @@ class RemovingCombobox(QWidget):
 
 
 class FloatSlider(QSlider):
+    onResize = QtCore.pyqtSignal()
+
     def __init__(self, *args, **kwargs):
         super(QSlider, self).__init__(*args, **kwargs)
         self.decimals = 5
@@ -289,6 +291,10 @@ class FloatSlider(QSlider):
 
     def maximum(self):
         return self._max_value
+
+    def resizeEvent(self, *args, **kwargs):
+        super().resizeEvent(*args, **kwargs)
+        self.onResize.emit()
 
 
 class DisplaySlider(QWidget):
@@ -325,7 +331,7 @@ class DisplaySlider(QWidget):
         self.__hide_btn.setMaximumWidth(20)
         wrapper_layout.addWidget(self.__hide_btn, alignment=QtCore.Qt.AlignRight)
 
-        self.__value_label.setText(self.get_formated_value())
+        self.__value_label.setText(str(self.get_formated_value()))
         self.__value_label.adjustSize()
         self.__value_label.clicked.connect(self.show_entry)
 
@@ -338,12 +344,16 @@ class DisplaySlider(QWidget):
         self._slider.setMaximum(50)
         self._slider.setMinimum(10)
         self._slider.valueChanged.connect(self.on_value_change)
+        self._slider.onResize.connect(self.display_value)
 
-    def initialize(self, slider_id, minimum=0, maximum=100, slider_name='Slider', on_change_command=None, hide_command=None):
+    def initialize(self, slider_id, minimum=0, maximum=100, slider_name='Slider', on_change_command=None,
+                   hide_command=None, value=None):
         self.__id = slider_id
         self._slider.setMinimum(minimum)
         self._slider.setMaximum(maximum)
         self.__wrapper_gb.setTitle(slider_name)
+        if value is not None:
+            self._slider.setValue(value)
         if on_change_command is not None:
             self._slider.valueChanged.connect(lambda: on_change_command(self._slider.value()))
         if hide_command is not None:
@@ -357,24 +367,19 @@ class DisplaySlider(QWidget):
         return new_value.rstrip('0').rstrip('.') if '.' in new_value else new_value
 
     def display_value(self):
-        self.__value_label.setText(self.get_formated_value())
+        self.__value_label.setText(str(self.get_formated_value()))
         self.__value_label.adjustSize()
         new_x = self.convert_to_pixels(self._slider.value())
         self.__entry_label_gb.move(int(new_x), self._slider.y() - 20)
 
     def show_entry(self):
         self.__value_label.hide()
-        self.__value_entry.setText(self.__value_label.text())
+        self.__value_entry.setText(str(self.__value_label.text()))
         self.__value_entry.show()
 
     def show_label(self):
         self.__value_entry.hide()
         self.__value_label.show()
-
-    def resizeEvent(self, QResizeEvent):
-        if self._slider is not None:
-            self.display_value()
-        super().resizeEvent(QResizeEvent)
 
     def convert_to_pixels(self, value):
         hodnota = ((value - self._slider.minimum()) / (self._slider.maximum() - self._slider.minimum()))
@@ -419,6 +424,14 @@ class VariableDisplaySlider(DisplaySlider):
         super().__init__(*args, **kwargs)
         self.__variable_list = None
         self.__index = None
+
+    def initialize(self, slider_id, minimum=0, maximum=100, slider_name='Slider', on_change_command=None,
+                  hide_command=None, variable_list=None, index=None):
+        value = None
+        if variable_list is not None and index is not None:
+            self.set_variable(variable_list, index)
+            value = variable_list[index]
+        super().initialize(slider_id, minimum, maximum, slider_name, on_change_command, hide_command, value)
         
     def set_variable(self, var_list, index):
         self.__variable_list = var_list
