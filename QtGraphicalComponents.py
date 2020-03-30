@@ -44,8 +44,6 @@ class RewritableLabel(QWidget):
                  *args, **kwargs):
         super().__init__(*args, **kwargs)
         font = QtGui.QFont()
-        font.setPointSize(10)
-        self.setFont(font)
         self.__id = id
 
         self.__name_variable = label_text + ' '
@@ -302,8 +300,8 @@ class DisplaySlider(QWidget):
         super().__init__(*args, **kwargs)
         self.__id = None
         self.__wrapper_gb = QGroupBox()
-        self.__entry_label_gb = QWidget(self.__wrapper_gb)
         self._slider = FloatSlider(QtCore.Qt.Horizontal)
+        self.__entry_label_gb = QFrame(self.__wrapper_gb)
         self.__hide_btn = QPushButton()
         self.__value_label = ClickLabel(self.__entry_label_gb)
         self.__value_entry = BackEntry(self.__entry_label_gb)
@@ -316,13 +314,16 @@ class DisplaySlider(QWidget):
         v_layout.setContentsMargins(0, 0, 0, 0)
         v_layout.addWidget(self.__wrapper_gb)
         self.__wrapper_gb.setTitle('Nadpis')
-        dispaly_layout = QVBoxLayout()
-        self.__entry_label_gb.setLayout(dispaly_layout)
+        display_layout = QVBoxLayout()
+
+        display_layout.addWidget(self.__value_label)
+        display_layout.addWidget(self.__value_entry)
+        self.__entry_label_gb.setLayout(display_layout)
 
         wrapper_layout = QHBoxLayout()
         self.__wrapper_gb.setLayout(wrapper_layout)
         wrapper_layout.setSpacing(10)
-        wrapper_layout.setContentsMargins(5, 10, 0, 10)
+        wrapper_layout.setContentsMargins(10, 15, 5, 5)
 
         wrapper_layout.addWidget(self._slider)
 
@@ -336,8 +337,7 @@ class DisplaySlider(QWidget):
         self.__value_label.clicked.connect(self.show_entry)
 
         self.__value_entry.hide()
-        self.__value_entry.setMaximumWidth(40)
-        self.__value_entry.setMaximumHeight(15)
+        self.__value_entry.setFixedWidth(30)
         self.__value_entry.escPress.connect(self.show_label)
         self.__value_entry.returnPressed.connect(self.return_pressed)
 
@@ -369,21 +369,27 @@ class DisplaySlider(QWidget):
     def display_value(self):
         self.__value_label.setText(str(self.get_formated_value()))
         self.__value_label.adjustSize()
+        self.__entry_label_gb.adjustSize()
         new_x = self.convert_to_pixels(self._slider.value())
-        self.__entry_label_gb.move(int(new_x), self._slider.y() - 20)
+        self.__entry_label_gb.move(int(new_x), self._slider.y() - 30)
 
     def show_entry(self):
         self.__value_label.hide()
         self.__value_entry.setText(str(self.__value_label.text()))
         self.__value_entry.show()
+        self.__value_entry.adjustSize()
+        self.__value_entry.setFixedHeight(self.__value_label.height())
+        self.__entry_label_gb.adjustSize()
+        self.display_value()
 
     def show_label(self):
         self.__value_entry.hide()
         self.__value_label.show()
+        self.display_value()
 
     def convert_to_pixels(self, value):
         hodnota = ((value - self._slider.minimum()) / (self._slider.maximum() - self._slider.minimum()))
-        return hodnota * (self._slider.width() - self.__value_label.width())
+        return hodnota * (self._slider.width() - self.__entry_label_gb.width() / 2)
 
     def validate_entry(self, ):
         try:
@@ -432,7 +438,7 @@ class VariableDisplaySlider(DisplaySlider):
             self.set_variable(variable_list, index)
             value = variable_list[index]
         super().initialize(slider_id, minimum, maximum, slider_name, on_change_command, hide_command, value)
-        
+
     def set_variable(self, var_list, index):
         self.__variable_list = var_list
         self.__index = index
@@ -442,8 +448,8 @@ class VariableDisplaySlider(DisplaySlider):
         if self.__variable_list is not None:
             self.__variable_list[self.__index] = self._slider.value()
         super().on_value_change()
-    
-        
+
+
 
 # class ResizableWidget(QWidget):
 #     def __init__(self, *args, **kwargs):

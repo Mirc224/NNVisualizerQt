@@ -330,7 +330,7 @@ class GraphLogicLayer:
 
         self.__main_graph_frame.initialize(self)
 
-    def recalculate_cords(self, starting_layer=0):
+    def recalculate(self, starting_layer=0):
         """
         Popis
         ----------------------------------------------------------------------------------------------------------------
@@ -345,16 +345,36 @@ class GraphLogicLayer:
         # Je možné paralelizovat výpočty. Pre každú rátanú vrstvu je použité jedno vlákno.
         threads = []
         start = time.perf_counter()
-        for layer_number in self.__active_layers:
-            if layer_number > starting_layer:
-                t = threading.Thread(target=self.set_points_for_layer, args=(layer_number,))
-                t.start()
-                threads.append(t)
-        # Po výpočtoch je potrebné počkať na dokončenie
-        for thread in threads:
-            thread.join()
+        layers_for_update = [layer_number for layer_number in self.__active_layers if layer_number >= starting_layer]
+        self.recalculate_cords(layers_for_update)
+        layers_for_update = [layer_number for layer_number in layers_for_update
+                             if layer_number >= starting_layer and self.__neural_layers[layer_number].calculate_polygon]
+        self.recalculate_grid(layers_for_update)
         end = time.perf_counter()
         print(f'Calculation time {end - start} s')
+
+    def recalculate_cords(self, layers_for_update):
+        if self.__input_data is not None:
+            activations = self.get_activation_for_layer(self.__input_data, layers_for_update)
+            if isinstance(activations, list):
+                for layer_number in layers_for_update:
+                    self.__neural_layers[layer_number].point_cords = activations[layer_number].transpose()
+            else:
+                self.__neural_layers[layers_for_update[0]].point_cords = activations.transpose()
+
+    def recalculate_grid(self, layers_for_update):
+        if self.__polygon_cords is not None:
+            activations_start = self.get_activation_for_layer(self.__polygon_cords[0], layers_for_update)
+            activations_end = self.get_activation_for_layer(self.__polygon_cords[1], layers_for_update)
+            if isinstance(activations_start, list):
+                for layer_number in layers_for_update:
+                    start_points = activations_start[layer_number].transpose()
+                    end_points = activations_end[layer_number].transpose()
+                    self.__neural_layers[layer_number].polygon_cords_tuples = [start_points, end_points]
+            else:
+                start_points = activations_start.transpose()
+                end_points = activations_end.transpose()
+                self.__neural_layers[layers_for_update[0]].polygon_cords_tuples = [start_points, end_points]
 
     def monitor_change(self):
         """
@@ -388,11 +408,10 @@ class GraphLogicLayer:
                     starting_layer_number = layer_number
                 layer = self.__neural_layers[layer_number]
                 self.set_layer_weights_and_biases(layer_number, layer.layer_weights, layer.layer_biases)
-            self.recalculate_cords(starting_layer_number)
+            self.recalculate(starting_layer_number)
             self.broadcast_changes(starting_layer_number)
-            # time.sleep(0.05)
 
-    def get_activation_for_layer(self, input_points, layer_number):
+    def get_activation_for_layer(self, input_points, updated_layers_list):
         """
         Popis
         ----------------------------------------------------------------------------------------------------------------
@@ -404,12 +423,12 @@ class GraphLogicLayer:
         :param layer_number: číslo vrstvy, ktorej výstup chceme získať
         """
         # Aktivacia na jednotlivých vrstvách. Ak je to prvá, vstupná vrstva, potom je aktivácia len vstupné hodnoty.
-        if layer_number == 0:
-            return input_points
-        else:
-            intermediate_layer_mode = keras.Model(inputs=self.__keras_model.input,
-                                                  outputs=self.__keras_layers[layer_number - 1].output)
-            return intermediate_layer_mode.predict(input_points)
+        calculated_layers = [self.__keras_model.layers[layer_number].output for layer_number in
+                             updated_layers_list]
+        intermediate_layer_mode = keras.Model(inputs=self.__keras_model.input,
+                                              outputs=calculated_layers)
+        return intermediate_layer_mode.predict(input_points)
+
 
     def set_points_for_layer(self, layer_number):
         """
@@ -424,16 +443,16 @@ class GraphLogicLayer:
         """
         # nastavenie vstupných bodov
         if self.__input_data is not None:
-            self.__neural_layers[layer_number].point_cords = self.get_activation_for_layer(self.__input_data,
-                                                                                           layer_number).transpose()
+            self.__neural_layers[layer_number].point_cords = self.get_activation_for_layer(self.__input_data, [layer_number]).transpose()
+
         if self.__neural_layers[layer_number].calculate_polygon:
             self.set_polygon_cords(layer_number)
 
     def set_polygon_cords(self, layer_number):
         # Výpočet aktivácie pre jednotlivé body hrán polygonu.
         if self.__polygon_cords is not None:
-            start_points = self.get_activation_for_layer(self.__polygon_cords[0], layer_number).transpose()
-            end_points = self.get_activation_for_layer(self.__polygon_cords[1], layer_number).transpose()
+            start_points = self.get_activation_for_layer(self.__polygon_cords[0], [layer_number]).transpose()
+            end_points = self.get_activation_for_layer(self.__polygon_cords[1], [layer_number]).transpose()
             self.__neural_layers[layer_number].polygon_cords_tuples = [start_points, end_points]
 
     def broadcast_changes(self, start_layer=0):
@@ -450,7 +469,7 @@ class GraphLogicLayer:
         """
         # Pre aktívne vrstvy, ktoré sú väčšie ako začiatočná vFrstva sa aplikujú vykonané zmeny.
         for layer_number in self.__active_layers:
-            if layer_number > start_layer:
+            if layer_number >= start_layer:
                 self.__neural_layers[layer_number].apply_changes()
                 self.__neural_layers[layer_number].redraw_graph_if_active()
         #self.__main_graph_frame.update_active_options_layer(start_layer)
@@ -485,7 +504,7 @@ class GraphLogicLayer:
         """
         # layer = self.__neural_layers[layer_number]
         # self.set_layer_weights_and_biases(layer_number, layer.layer_weights, layer.layer_biases)
-        # self.recalculate_cords(layer_number)
+        # self.recalculate(layer_number)
         # self.broadcast_changes(layer_number)
         # Oznámi, že došlo k zmene na vrstve. Tá je zaradená do zásobníka.
         self.__condition_var.acquire()
@@ -591,7 +610,7 @@ class GraphLogicLayer:
                         layer.possible_polygon = False
 
                 # Ak prebehlo načítvanaie bez chyby, sú aplikované zmeny,
-                self.recalculate_cords(-1)
+                self.recalculate(-1)
                 self.broadcast_changes(-1)
                 self.__main_graph_frame.apply_changes_on_options_frame()
                 return None
@@ -817,6 +836,7 @@ class MainGraphFrame(QWidget):
 
             self.__logic_layer.set_points_for_layer(layer_number)
             layer_to_show.apply_changes()
+            layer_to_show.use_config()
             layer_to_show.redraw_graph_if_active()
             # Ak je počet aktívnych vrstiev rovný celkovému počtu vrstiev je skrytý panel pre pridávanie nových vrstiev.
             if len(self.__active_layers) == self.__number_of_layers:
@@ -885,7 +905,7 @@ class NeuralLayer:
         :param kwargs:
         '''
         self.__layer_name = keras_layer.get_config()['name']
-        self.__number_of_dimension = keras_layer.input_shape[1]
+        self.__number_of_dimension = keras_layer.units
         self.__layer_number = layer_number
 
         if len(keras_layer.get_weights()) != 0:
@@ -1993,7 +2013,7 @@ class PlotingFrame(QWidget):
         super().__init__(*args, **kwargs)
         #self.__plot_wrapper_frame = ResizableWindow(parent, 'bottom', *args, **kwargs)
         #self.__plot_wrapper_frame.pack(fill='both', expand=True)
-        self.__cords = [[], [], []]
+        self.__cords = np.array([[], [], []])
         self.__line_cords_tuples = None
 
         self.__draw_polygon = False
@@ -2044,7 +2064,8 @@ class PlotingFrame(QWidget):
     def initialize(self, controller: GraphFrame, displayed_cords, points_config: dict, layer_name: str):
         if len(displayed_cords) != 0:
             self.__cords = displayed_cords
-
+        else:
+            self.__cords = np.array([[], [], []])
         self.__parent_controller = controller
         self.__change_in_progress = False
         self.__graph_title = layer_name
@@ -2118,6 +2139,7 @@ class PlotingFrame(QWidget):
         self.set_point_color()
         self.__axis.set_title(self.__graph_title)
         self.__axis.set_xlabel(self.__graph_labels[0])
+
         if len(self.__cords[0]) == len(self.__points_colour):
             if number_of_cords >= 2:
                 self.__axis.set_ylabel(self.__graph_labels[1])
@@ -2386,6 +2408,7 @@ class LayerWeightControllerFrame(QWidget):
     def create_weight_slider(self, start_neuron: int, end_neuron: int):
         slider_name = 'Vaha {}-{}'.format(start_neuron, end_neuron)
         slider = VariableDisplaySlider()
+        slider.setMinimumHeight(60)
         slider.initialize(slider_name, -1, 1, slider_name, self.on_slider_change, self.remove_slider,
                           self.__weights_reference[start_neuron], end_neuron)
         self.__scroll_area_layout.insertWidget(self.__scroll_area_layout.count()-1, slider)
@@ -2396,6 +2419,7 @@ class LayerWeightControllerFrame(QWidget):
     def create_bias_slider(self, end_neuron: int):
         slider_name = 'Bias {}'.format(end_neuron)
         slider = VariableDisplaySlider()
+        slider.setMinimumHeight(60)
         slider.initialize(slider_name, -1, 1, slider_name, self.on_slider_change, self.remove_slider,
                           self.__bias_reference, end_neuron)
         self.__scroll_area_layout.insertWidget(self.__scroll_area_layout.count() - 1, slider)
@@ -2433,7 +2457,7 @@ class LayerWeightControllerFrame(QWidget):
         self.__controller.wight_bias_change_signal()
 
     def clear(self):
-        for slider in self.__active_slider_dict:
+        for slider in self.__active_slider_dict.values():
             slider.clear()
         self.__active_slider_dict = {}
         self.__add_slider_rc.clear()
