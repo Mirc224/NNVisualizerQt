@@ -2,6 +2,7 @@ from PyQt5 import QtCore, Qt
 from PyQt5 import QtGui
 from PyQt5.QtWidgets import *
 
+import time
 
 class ClickLabel(QLabel):
     clicked = QtCore.pyqtSignal()
@@ -158,12 +159,21 @@ class RemovingCombobox(QWidget):
 
         if self.__read_only and self.__default_text != '':
             self.__ordered_values.append(default_text)
+        tmp_set = set()
+        prev_set_len = len(tmp_set)
 
         for i, item_name in enumerate(item_list):
-            item_name = self.get_unique_name(item_name)
+            start = time.perf_counter()
+            tmp_set.add(item_name)
+            if len(tmp_set) == prev_set_len:
+                item_name = self.get_unique_name(item_name)
+                tmp_set.add(item_name)
+            prev_set_len = len(tmp_set)
             self.__all_values[item_name] = i
             self.__ordered_values.append(item_name)
             self.__backward_values[i] = item_name
+            end = time.perf_counter()
+            print(f'Calculation time {end - start} s')
 
         self.update_list()
 
@@ -293,6 +303,9 @@ class FloatSlider(QSlider):
     def resizeEvent(self, *args, **kwargs):
         super().resizeEvent(*args, **kwargs)
         self.onResize.emit()
+
+    def wheelEvent(self, *args, **kwargs):
+        pass
 
 
 class DisplaySlider(QWidget):
@@ -450,39 +463,13 @@ class VariableDisplaySlider(DisplaySlider):
         super().on_value_change()
 
 
-
-# class ResizableWidget(QWidget):
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         self.__layout = QVBoxLayout(self)
-#         label = MouseMoveLabel('Label')
-#         label.clicked.connect(self.on_label_click)
-#         label.mouseRelease.connect(self.on_mouse_release)
-#         label.mouseMove.connect(self.on_mouse_move)
-#         self.__layout.addWidget(label, alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignBottom )
-#         self.setLayout(self.__layout)
-#         self.__start_x = 0
-#         self.__start_y = 0
-#
-#
-#     def on_label_click(self, event):
-#         self.__start_x = event.x()
-#         self.__start_y = event.y()
-#         print('click', event.x(), event.y())
-#
-#     def on_mouse_release(self, event):
-#         print('release')
-#
-#     def on_mouse_move(self, event):
-#         delta_x = self.__start_x - event.x()
-#         delta_y = self.__start_y - event.y()
-#         print(delta_x)
-#         actual_width = self.minimumWidth()
-#         actual_height = self.minimumHeight()
-#         print( 'actual width', actual_width - delta_x)
-#         # self.setMinimumHeight(actual_height - delta_y)
-#         # self.setMinimumWidth(actual_width - delta_x)
-#         self.setFixedSize(actual_width - delta_x, actual_height - delta_y)
-#         self.adjustSize()
-#         self.__start_x = event.x()
-#         self.__start_y = event.y()
+class CustomMessageBox(QMessageBox):
+    def __init__(self, window_title='' ,text='', yes_button='Yes', no_buton='No', cancel='Cancel', informative_text='',
+                 *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setWindowTitle(window_title)
+        self.setText(text)
+        self.__yesButton = self.addButton(yes_button, QMessageBox.YesRole)
+        self.__noButton = self.addButton(no_buton, QMessageBox.NoRole)
+        self.__cancelButton = self.addButton(cancel, QMessageBox.RejectRole)
+        self.setInformativeText(informative_text)
