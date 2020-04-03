@@ -1,6 +1,5 @@
 import sys
-from PyQt5 import QtCore
-from QtGraphicalComponents import *
+
 from LogicComponents import *
 
 
@@ -483,6 +482,9 @@ class MainGraphFrame(QWidget):
     def update_active_options_layer(self, start_layer):
         self.__options_frame.update_active_options_layer(start_layer)
 
+    def update_layer_if_active(self, neural_layer_ref):
+        if neural_layer_ref == self.__options_frame.active_layer:
+            self.apply_changes_on_options_frame()
 
 class OptionsFrame(QWidget):
     def __init__(self, *args, **kwargs):
@@ -843,6 +845,11 @@ class OptionsFrame(QWidget):
                 need_recalculation = self.apply_t_SNE_options_if_changed()
 
             if method != self.__changed_config['used_method']:
+                if method == 'PCA':
+                    self.__changed_config['PCA_config']['displayed_cords'] = list(range(min(self.__changed_config['output_dimension'],
+                                                                                            self.__changed_config['number_of_samples'],
+                                                                                            3)))
+
                 need_recalculation = True
                 self.__changed_config['used_method'] = self.__currently_used_method = method
             if need_recalculation:
@@ -949,39 +956,41 @@ class OptionsFrame(QWidget):
         return changed
 
     def set_cords_entries_according_chosen_method(self):
-        if self.__changed_config['has_feature_maps']:
-            if self.__currently_used_method == 'No method':
-                output_shape = self.__changed_config['output_shape']
-                entry_names = ['Axis X:', 'Axis Y:', 'Axis Z:']
-                print(self.__changed_config['no_method_config']['displayed_cords'])
-                cords_label_text = 'Possible cords: {}x{}'.format(output_shape[-3], output_shape[-2])
-                tmp_displayed_cords_tuples = list(zip(self.__changed_config['no_method_config']['displayed_cords'][0], self.__changed_config['no_method_config']['displayed_cords'][1]))
-                displayed_cords = []
-                for x, y in tmp_displayed_cords_tuples:
-                    displayed_cords.append(f'{x}, {y}')
-                possible_cords = self.__changed_config['max_visible_dim']
-        else:
-            if self.__currently_used_method == 'No method':
+        if self.__currently_used_method == 'No method':
+            if self.__changed_config['has_feature_maps']:
+                if self.__currently_used_method == 'No method':
+                    output_shape = self.__changed_config['output_shape']
+                    entry_names = ['Axis X:', 'Axis Y:', 'Axis Z:']
+                    cords_label_text = 'Possible cords: {}x{}'.format(output_shape[-3], output_shape[-2])
+                    tmp_displayed_cords_tuples = list(
+                        zip(self.__changed_config['no_method_config']['displayed_cords'][0],
+                            self.__changed_config['no_method_config']['displayed_cords'][1]))
+                    displayed_cords = []
+                    for x, y in tmp_displayed_cords_tuples:
+                        displayed_cords.append(f'{x}, {y}')
+                    possible_cords = self.__changed_config['max_visible_dim']
+            else:
                 entry_names = ['Axis X:', 'Axis Y:', 'Axis Z:']
                 cords_label_text = 'Possible cords: 0-{}'.format(self.__changed_config['output_dimension'] - 1)
                 displayed_cords = self.__changed_config['no_method_config']['displayed_cords']
                 possible_cords = self.__changed_config['max_visible_dim']
-            elif self.__currently_used_method == 'PCA':
-                entry_names = ['PC axis X:', 'PC axis Y:', 'PC axis Z:']
-                number_of_pcs = min(self.__changed_config['output_dimension'],
-                                    self.__changed_config['number_of_samples'])
-                if number_of_pcs == 0:
-                    cords_label_text = 'No possible PCs:'
-                else:
-                    cords_label_text = 'Possible PCs: 1-{}'.format(number_of_pcs)
-                possible_cords = min(number_of_pcs, self.__changed_config['max_visible_dim'])
-                displayed_cords = self.__changed_config['PCA_config']['displayed_cords'].copy()
-                displayed_cords = np.array(displayed_cords) + 1
-            elif self.__currently_used_method == 't-SNE':
-                entry_names = ['t-SNE X:', 't-SNE Y:', 't-SNE Z:']
-                possible_cords = self.__changed_config['t_SNE_config']['used_config']['n_components']
-                cords_label_text = 'Possible t-SNE components: 0-{}'.format(possible_cords - 1)
-                displayed_cords = self.__changed_config['t_SNE_config']['displayed_cords'].copy()
+        elif self.__currently_used_method == 'PCA':
+            entry_names = ['PC axis X:', 'PC axis Y:', 'PC axis Z:']
+            number_of_pcs = min(self.__changed_config['output_dimension'],
+                                self.__changed_config['number_of_samples'])
+            if number_of_pcs == 0:
+                cords_label_text = 'No possible PCs:'
+            else:
+                cords_label_text = 'Possible PCs: 1-{}'.format(number_of_pcs)
+            possible_cords = min(number_of_pcs, self.__changed_config['max_visible_dim'])
+            displayed_cords = self.__changed_config['PCA_config']['displayed_cords'].copy()
+            displayed_cords = np.array(displayed_cords) + 1
+        elif self.__currently_used_method == 't-SNE':
+            entry_names = ['t-SNE X:', 't-SNE Y:', 't-SNE Z:']
+            possible_cords = self.__changed_config['t_SNE_config']['used_config']['n_components']
+            cords_label_text = 'Possible t-SNE components: 0-{}'.format(possible_cords - 1)
+            displayed_cords = self.__changed_config['t_SNE_config']['displayed_cords'].copy()
+
         self.set_cords_entries(entry_names, cords_label_text, displayed_cords, possible_cords)
 
     def set_cords_entries(self, entry_name, cords_label_text, displayed_cords, possible_cords):
@@ -1076,81 +1085,79 @@ class OptionsFrame(QWidget):
         self.__active_layer.use_config()
 
     def validate_cord_entry(self, id, value):
-
-        if self.__changed_config['has_feature_maps']:
-            if self.__currently_used_method == 'No method':
-                changed_cords = self.__changed_config['no_method_config']['displayed_cords']
-                output_shape = self.__changed_config['output_shape']
-                borders = [output_shape[-3] - 1, output_shape[-2] - 1]
-                return_val = False
-                correct_input = []
-                output_text = ['', '']
-                entry_input = value.split(',')
-                if len(entry_input) == 2:
-                    for i, number in enumerate(entry_input):
-                        try:
-                            number_int = int(number)
-                            if 0 <= number_int <= borders[i]:
-                                correct_input.append(int(number))
-                                output_text[i] = int(number)
-                            else:
-                                output_text[i] = 'err'
-                        except ValueError:
-                            output_text[i] = 'err'
-
-                    output_msg = f'{output_text[0]}, {output_text[1]}'
-                    if len(correct_input) == 2:
-                        changed_cords[0][id] = correct_input[0]
-                        changed_cords[1][id] = correct_input[1]
-                        self.__cords_entries_list[id].set_entry_text(output_msg)
-                        return_val = True
-                    else:
-                        return_val = False
-                else:
-                    output_msg = 'err'
-                    return_val = False
-
-                self.__cords_entries_list[id].set_variable_label(output_msg)
-                self.__cords_entries_list[id].show_variable_label()
-                self.__changed_config['cords_changed'] = True
-                if return_val:
-                    self.__active_layer.use_config()
-                return return_val
-        else:
-            try:
-                bottom_border = 0
-                top_border = 0
-                changed_cords = None
+        bottom_border = 0
+        top_border = 0
+        changed_cords = None
+        if self.__currently_used_method == 'No method':
+            if self.__changed_config['has_feature_maps']:
                 if self.__currently_used_method == 'No method':
-                    bottom_border = 0
-                    top_border = self.__changed_config['number_of_dimensions']
                     changed_cords = self.__changed_config['no_method_config']['displayed_cords']
-                    new_value = int(value)
-                elif self.__currently_used_method == 'PCA':
-                    bottom_border = 1
-                    top_border = min(self.__changed_config['number_of_dimensions'],
-                                     self.__changed_config['number_of_samples']) + 1
-                    changed_cords = self.__changed_config['PCA_config']['displayed_cords']
-                    new_value = int(value) - 1
-                elif self.__currently_used_method == 't-SNE':
-                    bottom_border = 0
-                    top_border = self.__changed_config['t_SNE_config']['used_config']['n_components']
-                    changed_cords = self.__changed_config['t_SNE_config']['displayed_cords']
-                    new_value = int(value)
+                    output_shape = self.__changed_config['output_shape']
+                    borders = [output_shape[-3] - 1, output_shape[-2] - 1]
+                    return_val = False
+                    correct_input = []
+                    output_text = ['', '']
+                    entry_input = value.split(',')
+                    if len(entry_input) == 2:
+                        for i, number in enumerate(entry_input):
+                            try:
+                                number_int = int(number)
+                                if 0 <= number_int <= borders[i]:
+                                    correct_input.append(int(number))
+                                    output_text[i] = int(number)
+                                else:
+                                    output_text[i] = 'err'
+                            except ValueError:
+                                output_text[i] = 'err'
 
-                if not (bottom_border <= int(value) < top_border):
-                    self.__cords_entries_list[id].set_entry_text('err')
-                    return False
+                        output_msg = f'{output_text[0]}, {output_text[1]}'
+                        if len(correct_input) == 2:
+                            changed_cords[0][id] = correct_input[0]
+                            changed_cords[1][id] = correct_input[1]
+                            self.__cords_entries_list[id].set_entry_text(output_msg)
+                            return_val = True
+                        else:
+                            return_val = False
+                    else:
+                        output_msg = 'err'
+                        return_val = False
 
-                self.__cords_entries_list[id].set_variable_label(value)
-                self.__cords_entries_list[id].show_variable_label()
-                changed_cords[id] = int(new_value)
-                self.__changed_config['cords_changed'] = True
-                self.__active_layer.use_config()
-                return True
-            except ValueError:
+                    self.__cords_entries_list[id].set_variable_label(output_msg)
+                    self.__cords_entries_list[id].show_variable_label()
+                    self.__changed_config['cords_changed'] = True
+                    if return_val:
+                        self.__active_layer.use_config()
+                    return return_val
+            else:
+                bottom_border = 0
+                top_border = self.__changed_config['output_dimension']
+                changed_cords = self.__changed_config['no_method_config']['displayed_cords']
+                new_value = int(value)
+        elif self.__currently_used_method == 'PCA':
+            bottom_border = 1
+            top_border = min(self.__changed_config['output_dimension'],
+                             self.__changed_config['number_of_samples']) + 1
+            changed_cords = self.__changed_config['PCA_config']['displayed_cords']
+            new_value = int(value) - 1
+        elif self.__currently_used_method == 't-SNE':
+            bottom_border = 0
+            top_border = self.__changed_config['t_SNE_config']['used_config']['n_components']
+            changed_cords = self.__changed_config['t_SNE_config']['displayed_cords']
+            new_value = int(value)
+        try:
+            if not (bottom_border <= int(value) < top_border):
                 self.__cords_entries_list[id].set_entry_text('err')
                 return False
+
+            self.__cords_entries_list[id].set_variable_label(value)
+            self.__cords_entries_list[id].show_variable_label()
+            changed_cords[id] = int(new_value)
+            self.__changed_config['cords_changed'] = True
+            self.__active_layer.use_config()
+            return True
+        except ValueError:
+            self.__cords_entries_list[id].set_entry_text('err')
+            return False
 
     def validate_t_sne_entry(self, id, value):
         try:

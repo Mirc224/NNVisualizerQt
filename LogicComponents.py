@@ -329,6 +329,7 @@ class GraphLogicLayer:
                     return 'No images loaded!'
             print('idem ratat')
             self.recalculate()
+            self.set_default_cords_for_each_layer()
             self.broadcast_changes()
             self.__mg_frame.apply_changes_on_options_frame()
             return None
@@ -404,6 +405,7 @@ class GraphLogicLayer:
 
                 # Ak prebehlo načítvanaie bez chyby, sú aplikované zmeny,
                 self.recalculate()
+                self.set_default_cords_for_each_layer()
                 self.broadcast_changes()
                 self.__mg_frame.apply_changes_on_options_frame()
                 return None
@@ -486,6 +488,13 @@ class GraphLogicLayer:
             list_of_images_arrays.append(new_array)
         return list_of_images_arrays
 
+    def set_default_cords_for_each_layer(self):
+        for layer in self.__neural_layers:
+            layer.set_default_cords()
+
+    def require_options_bar_update(self, neural_layer):
+        self.__mg_frame.update_layer_if_active(neural_layer)
+
     def __del__(self):
         self.__is_running = False
         self.__condition_var.acquire()
@@ -542,8 +551,12 @@ class NeuralLayer:
         self.__has_feature_maps = False
         self.__selected_feature_map = 0
         self.__output_shape = keras_layer.output_shape
+        self.__output_dimension = None
         if len(self.__output_shape) > 2:
             self.__has_feature_maps = True
+            self.__output_dimension = self.__output_shape[-3] * self.__output_shape[-2]
+        else:
+            self.__output_dimension = self.__output_shape[-1]
         self.__number_of_outputs = self.__output_shape[-1]
         self.__layer_number = layer_number
         if len(keras_layer.get_weights()) != 0:
@@ -569,7 +582,7 @@ class NeuralLayer:
         self.__layer_number = layer_number
         self.__point_cords = np.array([])
         self.__used_cords = []
-        self.__neuron_labels = []
+        self.__activation_nodes_labels = []
         self.__pc_labels = []
 
         self.__points_method_cords = []
@@ -602,58 +615,30 @@ class NeuralLayer:
         self.__neuron_labels = []
         self.__pc_labels = []
         self.__points_method_cords = []
-        used_t_sne_components = []
-        used_no_method_cords = []
-        used_PCA_components = []
         axis_labels = []
 
         if not self.__has_feature_maps:
             for i in range(self.__number_of_outputs):
-                self.__neuron_labels.append(f'Neuron{i}')
+                self.__activation_nodes_labels.append(f'Neuron{i}')
                 self.__pc_labels.append(f'PC{i + 1}')
         else:
             number_of_rows = self.__output_shape[1]
             number_of_cols = self.__output_shape[2]
             for height_i in range(number_of_rows):
                 for width_i in range(number_of_cols):
-                    self.__neuron_labels.append(f'FM point {height_i}-{width_i}')
+                    self.__activation_nodes_labels.append(f'FM point {height_i}-{width_i}')
                     self.__pc_labels.append(f'PC{height_i * number_of_cols + width_i + 1}')
 
-        if self.__has_feature_maps:
-            output_dimension = self.__output_shape[-3] * self.__output_shape[-2]
-        else:
-            output_dimension = self.__number_of_outputs
-
-        number_of_cords = min(3, output_dimension)
-        if self.__has_feature_maps:
-            predefined_cords = [[], []]
-            for i in range(number_of_cords):
-                x_cord = i
-                y_cord = i
-                if y_cord > self.__output_shape[-3]:
-                    y_cord = self.__output_shape[-3] -1
-                if x_cord > self.__output_shape[-2]:
-                    x_cord = self.__output_shape[-2] - 1
-                predefined_cords[0].append(x_cord)
-                predefined_cords[1].append(y_cord)
-                axis_labels.append(axis_default_names[i])
-            print(predefined_cords)
-            used_no_method_cords = predefined_cords
-            used_t_sne_components = predefined_cords
-            used_PCA_components = predefined_cords
-        else:
-            for i in range(number_of_cords):
-                used_no_method_cords.append(i)
-                used_t_sne_components.append(i)
-                used_PCA_components.append(i)
-                axis_labels.append(axis_default_names[i])
+        number_of_cords = min(3, self.__output_dimension)
+        for i in range(number_of_cords):
+            axis_labels.append(axis_default_names[i])
 
         self.__layer_config['has_feature_maps'] = self.__has_feature_maps
         self.__layer_config['output_shape'] = self.__output_shape
         self.__layer_config['apply_changes'] = False
         self.__layer_config['cords_changed'] = False
         self.__layer_config['has_feature_maps'] = self.__has_feature_maps
-        self.__layer_config['output_dimension'] = output_dimension
+        self.__layer_config['output_dimension'] = self.__output_dimension
         self.__layer_config['layer_name'] = self.__layer_name
         self.__layer_config['max_visible_dim'] = number_of_cords
 
@@ -672,16 +657,14 @@ class NeuralLayer:
         self.__layer_config['used_method'] = 'No method'
         self.__layer_config['config_selected_method'] = 'No method'
 
-        #no_method_config = {'displayed_cords': used_no_method_cords}
-        print(used_no_method_cords)
-        no_method_config = {'displayed_cords': used_no_method_cords}
-        pca_config = {'displayed_cords': used_PCA_components,
+        no_method_config = {'displayed_cords': None}
+        pca_config = {'displayed_cords': None,
                       'n_possible_pc': 0,
                       'percentage_variance': None,
                       'largest_influence': None,
-                      'options_used_components': used_PCA_components.copy()}
+                      }
 
-        number_t_sne_components = min(self.__number_of_outputs, 3)
+        number_t_sne_components = min(self.__output_dimension, 3)
         used_config = {'n_components': number_t_sne_components,
                        'perplexity': 30,
                        'early_exaggeration': 12.0,
@@ -698,11 +681,13 @@ class NeuralLayer:
         t_sne_config = {'used_config': used_config,
                         'options_config': used_config.copy(),
                         'parameter_borders': parameter_borders,
-                        'displayed_cords': used_t_sne_components}
+                        'displayed_cords': None}
 
         self.__layer_config['no_method_config'] = no_method_config
         self.__layer_config['PCA_config'] = pca_config
         self.__layer_config['t_SNE_config'] = t_sne_config
+
+        self.set_default_cords()
 
     def apply_changes(self):
         '''
@@ -747,55 +732,80 @@ class NeuralLayer:
 
     def set_displayed_cords(self):
         if self.__has_feature_maps:
-            feature_map_points = feature_map_points = self.__point_cords[self.__selected_feature_map, :, :, :].transpose()
-            print(feature_map_points)
-            print(feature_map_points[:, self.__used_cords[0], self.__used_cords[1]].transpose())
-            self.__graph_frame.plotting_frame.points_cords = feature_map_points[:, self.__used_cords[0], self.__used_cords[1]].transpose()
+            used_method = self.__layer_config['used_method']
+            if used_method == 'No method':
+                if len(self.__points_method_cords) != 0:
+                    feature_map_points = self.__points_method_cords[self.__selected_feature_map, :, :, :].transpose()
+                    self.__graph_frame.plotting_frame.points_cords = feature_map_points[:, self.__used_cords[0],
+                                                                     self.__used_cords[1]].transpose()
+                    print(feature_map_points)
+                    print(feature_map_points[:, self.__used_cords[0], self.__used_cords[1]].transpose())
+            else:
+                if len(self.__points_method_cords) != 0:
+                    self.__graph_frame.plotting_frame.points_cords = self.__points_method_cords[self.__used_cords]
         else:
-            self.__graph_frame.plotting_frame.points_cords = self.__points_method_cords[self.__used_cords]
+            if len(self.__points_method_cords) != 0:
+                self.__graph_frame.plotting_frame.points_cords = self.__points_method_cords[self.__used_cords]
 
     def apply_no_method(self):
-        # self.__used_cords = self.__layer_config['no_method_config']['displayed_cords']
         if self.__has_feature_maps:
-            # print(self.__point_cords.shape)
-            # feature_map_points = self.__point_cords[0, :, :, :].transpose()
-            # print(feature_map_points)
-            # feature_map_points = self.__point_cords[1, :, :, :].transpose()
-            # print(feature_map_points)
-            # print(feature_map_points.shape)
-            # feature_map_points = self.__point_cords[:, :, :]
-            # print(feature_map_points)
-            # print(feature_map_points.shape)
             self.__points_method_cords = self.__point_cords.copy()
         else:
             self.__points_method_cords = self.__point_cords.copy()
 
     def apply_PCA(self):
-        pca_config = self.__layer_config['PCA_config']
-        # self.__used_cords = pca_config['displayed_cords']
-        points_cords = self.__point_cords.transpose()
-        scaled_data = preprocessing.StandardScaler().fit_transform(points_cords)
-        pca = PCA()
-        pca.fit(scaled_data)
-        pca_data = pca.transform(scaled_data)
-        pcs_components_transpose = pca_data.transpose()
-        self.__points_method_cords = pcs_components_transpose
-        number_of_pcs_indexes = min(self.__number_of_outputs, pca.explained_variance_ratio_.size)
-        if number_of_pcs_indexes > 0:
-            self.__layer_config['PCA_config']['percentage_variance'] = pd.Series(
-                np.round(pca.explained_variance_ratio_ * 100, decimals=1),
-                index=self.__pc_labels[:number_of_pcs_indexes])
-            self.__layer_config['PCA_config']['largest_influence'] = pd.Series(pca.components_[0],
-                                                                               index=self.__neuron_labels)
+        if self.__has_feature_maps:
+            feature_map_points = self.__point_cords[self.__selected_feature_map, :, :, :].transpose()
+            flattened = np.array([xi.flatten() for xi in feature_map_points])
+            # print(flattened)
+            # print(flattened.shape)
+            scaled_data = preprocessing.StandardScaler().fit_transform(flattened)
+            pca = PCA()
+            pca.fit(scaled_data)
+            pca_data = pca.transform(scaled_data)
+            pcs_components_transpose = pca_data.transpose()
+            self.__points_method_cords = pcs_components_transpose
+            number_of_pcs_indexes = min(self.__output_dimension, pca.explained_variance_ratio_.size)
+            if number_of_pcs_indexes > 0:
+                self.__layer_config['PCA_config']['percentage_variance'] = pd.Series(
+                    np.round(pca.explained_variance_ratio_ * 100, decimals=1),
+                    index=self.__pc_labels[:number_of_pcs_indexes])
+                self.__layer_config['PCA_config']['largest_influence'] = pd.Series(pca.components_[0],
+                                                                                   index=self.__activation_nodes_labels)
+        else:
+            points_cords = self.__point_cords.transpose()
+            scaled_data = preprocessing.StandardScaler().fit_transform(points_cords)
+            pca = PCA()
+            pca.fit(scaled_data)
+            pca_data = pca.transform(scaled_data)
+            pcs_components_transpose = pca_data.transpose()
+            self.__points_method_cords = pcs_components_transpose
+            number_of_pcs_indexes = min(self.__output_dimension, pca.explained_variance_ratio_.size)
+            if number_of_pcs_indexes > 0:
+                self.__layer_config['PCA_config']['percentage_variance'] = pd.Series(
+                    np.round(pca.explained_variance_ratio_ * 100, decimals=1),
+                    index=self.__pc_labels[:number_of_pcs_indexes])
+                self.__layer_config['PCA_config']['largest_influence'] = pd.Series(pca.components_[0],
+                                                                                   index=self.__activation_nodes_labels)
 
     def apply_t_SNE(self):
-        t_sne_config = self.__layer_config['t_SNE_config']
-        # self.__used_cords = t_sne_config['displayed_cords']
-        points_cords = self.__point_cords.transpose()
-        number_of_components = t_sne_config['used_config']['n_components']
-        tsne = TSNE(**t_sne_config['used_config'])
-        transformed_cords = tsne.fit_transform(points_cords).transpose()
-        self.__points_method_cords = transformed_cords
+        if self.__has_feature_maps:
+            feature_map_points = self.__point_cords[self.__selected_feature_map, :, :, :].transpose()
+            flattened = np.array([xi.flatten() for xi in feature_map_points])
+            t_sne_config = self.__layer_config['t_SNE_config']
+            # self.__used_cords = t_sne_config['displayed_cords']
+            number_of_components = t_sne_config['used_config']['n_components']
+            tsne = TSNE(**t_sne_config['used_config'])
+            transformed_cords = tsne.fit_transform(flattened).transpose()
+            self.__points_method_cords = transformed_cords
+        else:
+            t_sne_config = self.__layer_config['t_SNE_config']
+            # self.__used_cords = t_sne_config['displayed_cords']
+            points_cords = self.__point_cords.transpose()
+            number_of_components = t_sne_config['used_config']['n_components']
+            tsne = TSNE(**t_sne_config['used_config'])
+            transformed_cords = tsne.fit_transform(points_cords).transpose()
+            self.__points_method_cords = transformed_cords
 
     def clear(self):
         '''
@@ -844,6 +854,38 @@ class NeuralLayer:
 
         self.__visible = True
         return self.__graph_frame
+
+    def set_default_cords(self):
+        n_of_samples = self.__layer_config['number_of_samples']
+        o_dimension = self.__layer_config['output_dimension']
+        number_of_cords = min(3, o_dimension)
+        predefined_cords = None
+        if self.__has_feature_maps:
+            predefined_cords = [[], []]
+            for i in range(number_of_cords):
+                x_cord = i
+                y_cord = i
+                if y_cord > self.__output_shape[-3]:
+                    y_cord = self.__output_shape[-3] - 1
+                if x_cord > self.__output_shape[-2]:
+                    x_cord = self.__output_shape[-2] - 1
+                predefined_cords[0].append(x_cord)
+                predefined_cords[1].append(y_cord)
+        else:
+            predefined_cords = []
+            for i in range(number_of_cords):
+                predefined_cords.append(i)
+
+        self.__layer_config['no_method_config']['displayed_cords'] = predefined_cords
+        pca_config = self.__layer_config['PCA_config']
+        pca_config['displayed_cords'] = list(range(min(n_of_samples, o_dimension, 3)))
+        t_sne_config = self.__layer_config['t_SNE_config']
+        t_sne_config['displayed_cords'] = list(range(t_sne_config['used_config']['n_components']))
+
+    def signal_feature_map_change(self):
+        self.apply_changes()
+        self.redraw_graph_if_active()
+        self.__logic_layer.require_options_bar_update(self)
 
     def __del__(self):
         print('neural layer destroyed')
@@ -963,6 +1005,14 @@ class NeuralLayer:
     @property
     def output_dimension(self):
         return self.__layer_config['output_dimension']
+
+    @property
+    def selected_feature_map(self):
+        return self.__selected_feature_map
+
+    @selected_feature_map.setter
+    def selected_feature_map(self, new_value):
+        self.__selected_feature_map = new_value
 
 
 class NoFMNeuralLayer:
@@ -1085,7 +1135,7 @@ class NoFMNeuralLayer:
         self.__layer_config['cords_changed'] = False
         self.__layer_config['has_feature_maps'] = self.__has_feature_maps
         self.__layer_config['number_of_dimensions'] = self.__number_of_outputs
-        self.__layer_config['output_shape'] = self.__number_of_outputs
+        self.__layer_config['output_shape'] = self.__output_shape
 
         self.__layer_config['layer_name'] = self.__layer_name
         self.__layer_config['max_visible_dim'] = number_of_cords
@@ -1460,7 +1510,11 @@ class GraphFrame(QFrame):
 
     def initialize_selected_feature_map(self):
         if self.__has_feature_maps:
-            self.__weight_controller.initialize_for_fm(self.__feature_map_cb.currentIndex())
+            selected_fm = self.__feature_map_cb.currentIndex()
+            self.__weight_controller.initialize_for_fm(selected_fm)
+            self.__neural_layer.selected_feature_map = selected_fm
+            self.__neural_layer.signal_feature_map_change()
+
 
     def weight_bias_change_signal(self):
         """
