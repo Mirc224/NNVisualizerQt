@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import *
 
 import time
 
+
 class ClickLabel(QLabel):
     clicked = QtCore.pyqtSignal()
 
@@ -117,7 +118,7 @@ class RemovingCombobox(QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        layout = QVBoxLayout()
+        layout = QVBoxLayout(self)
         self.setLayout(layout)
         self.__default_text = ''
         self.__read_only = ''
@@ -128,16 +129,20 @@ class RemovingCombobox(QWidget):
         self.__ordered_values = []
         self.__backward_values = {}
 
-        self.__combobox = QComboBox()
-        #self.__combobox.setSizePolicy(Qt.QSizePolicy.Expanding, Qt.QSizePolicy.Preferred)
-        #layout.setAlignment(QtCore.Qt.AlignHCenter)
+        self.__combobox = QComboBox(self)
+        self.__combobox.setInsertPolicy(QComboBox.NoInsert)
+        self.__combobox.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLength)
+        self.__combobox.view().setUniformItemSizes(True)
         layout.addWidget(self.__combobox, alignment=QtCore.Qt.AlignBottom)
 
-        self.__add_btn = QPushButton('Add')
+        self.__add_btn = QPushButton('Add', self)
         self.__add_btn.clicked.connect(self.show_selected)
         layout.addWidget(self.__add_btn, alignment=QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
 
         self.__command = None
+
+    def test(self):
+        print('test')
 
     def initialize(self, item_list, command=None, button_text: str = 'Add', read_only: bool = True, default_text: str = ''):
         self.__all_values = {}
@@ -163,7 +168,6 @@ class RemovingCombobox(QWidget):
         prev_set_len = len(tmp_set)
 
         for i, item_name in enumerate(item_list):
-            start = time.perf_counter()
             tmp_set.add(item_name)
             if len(tmp_set) == prev_set_len:
                 item_name = self.get_unique_name(item_name)
@@ -172,12 +176,8 @@ class RemovingCombobox(QWidget):
             self.__all_values[item_name] = i
             self.__ordered_values.append(item_name)
             self.__backward_values[i] = item_name
-            end = time.perf_counter()
-            print(f'Calculation time {end - start} s')
-
         self.update_list()
 
-        #self.__combobox.adjustSize()
         self.__add_btn.adjustSize()
         if self.__read_only and self.__default_text != '':
             return self.__ordered_values[1:].copy()
@@ -236,6 +236,7 @@ class RemovingCombobox(QWidget):
         if self.__read_only and self.__default_text != '':
             new_list.append(self.__default_text)
             starting_index += 1
+
         item_name = self.get_unique_name(item_name)
         new_list.append(item_name)
         new_list.extend(self.__ordered_values[starting_index:])
@@ -257,9 +258,6 @@ class RemovingCombobox(QWidget):
         self.__all_values = None
         self.__combobox = None
         self.__command = None
-
-    def __del__(self):
-        print('mazanie combobox')
 
 
 class FloatSlider(QSlider):
@@ -434,9 +432,6 @@ class DisplaySlider(QWidget):
         self.__wrapper_gb = None
         self.deleteLater()
 
-    def __del__(self):
-        print('mazanie slider')
-
 
 class VariableDisplaySlider(DisplaySlider):
     def __init__(self, *args, **kwargs):
@@ -464,12 +459,12 @@ class VariableDisplaySlider(DisplaySlider):
 
 
 class CustomMessageBox(QMessageBox):
-    def __init__(self, window_title='' ,text='', yes_button='Yes', no_buton='No', cancel='Cancel', informative_text='',
+    def __init__(self, window_title='', text='', yes_button='Yes', no_buton='No', cancel='Cancel', informative_text='',
                  *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setWindowTitle(window_title)
         self.setText(text)
-        self.__yesButton = self.addButton(yes_button, QMessageBox.YesRole)
-        self.__noButton = self.addButton(no_buton, QMessageBox.NoRole)
-        self.__cancelButton = self.addButton(cancel, QMessageBox.RejectRole)
+        self.addButton(yes_button, QMessageBox.YesRole)
+        self.addButton(no_buton, QMessageBox.NoRole)
+        self.addButton(cancel, QMessageBox.RejectRole)
         self.setInformativeText(informative_text)

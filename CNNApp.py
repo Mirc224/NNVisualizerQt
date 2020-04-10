@@ -8,20 +8,15 @@ class VisualizationApp(QMainWindow):
         """
         Popis
         ----------------------------------------------------------------------------------------------------------------
-        Spúšťacia trieda. Je obalom celeje aplikácie. Vytvorí programové okno, na celú obrazovku. Táto trieda dedí od
-        objektu Tk z build in knižnice tkinter.
+        Spúšťacia trieda. Je obalom celeje aplikácie. Vytvorí programové okno, na celú obrazovku.
 
-        Atribúty
-        ----------------------------------------------------------------------------------------------------------------
-        :var self.frames: je to dictionary, ktorý obsahuje jednotlivé hlavné stránky aplikácie. Kľúčom k týmto stránkam
-                          sú prototypy daných stránok
         """
         # Konštruktor základnej triedy.
         super(QMainWindow, self).__init__(*args, **kwargs)
 
-        self.setWindowTitle('Bakalarka')
+        self.setWindowTitle('NN visualization tool')
         self.setContentsMargins(0, 0, 0, 0)
-        graphPage = GraphPage()
+        graphPage = GraphPage(self)
         self.setCentralWidget(graphPage)
 
 
@@ -34,13 +29,14 @@ class GraphPage(QWidget):
 
         Atribúty
         ----------------------------------------------------------------------------------------------------------------
-        :var self.__logic_layer: Referencia na logiku aplikácie.
-        :var self.__keras_model: Načítaný model, jeho referencia je zaslaná do logic layer, kde sa menia váhy.
-                                 Používa sa aj pri ukladaní.
         :var self.__file_path:   Cesta k súboru pre lepší konfort pri načítaní a ukladaní.
         :var self.__file_name:   Meno súboru pre lepší konfort pri ukladaní.
-        :var self.__info_label:
-        :var self.__mg_frame:
+        :var self.__keras_model: Načítaný model, jeho referencia je zaslaná do logic layer, kde sa menia váhy.
+                                 Používa sa aj pri ukladaní.
+        :var self.__logic_layer: Referencia na logiku aplikácie.
+        :var self.__mg_frame:    Referencia na hlavné okno, ktoré bude zobrazovať grafy vrstiev a ovládače váh.
+        :var self.__load_ilabel: Zobrazuje informácie o načítaní vstupov.
+        :var self.__save_ilabel: Zobrazuje informáciu o tom, či je možné uložiť model.
         Parametre
         ----------------------------------------------------------------------------------------------------------------
         :param parent: nadradený tkinter Widget
@@ -50,132 +46,142 @@ class GraphPage(QWidget):
         self.__file_name = ''
         self.__keras_model = None
         self.__logic_layer = None
-        self.__mg_frame = MainGraphFrame()
-        self.__open_load_info_label = QLabel()
-        self.__save_model_info_label = QLabel()
+        self.__mg_frame = MainGraphFrame(self)
+        self.__load_ilabel = QLabel()
+        self.__save_ilabel = QLabel()
 
         self.initialize_ui()
 
         self.__logic_layer = GraphLogicLayer(self.__mg_frame)
 
         # self.open_model('./modelik.h5')
-        #self.open_model('./cnn_mnist.h5')
-        self.open_model('./small_1channel.h5')
+        self.open_model('./cnn_mnist.h5')
+        # self.open_model('./small_1channel.h5')
         # self.open_model('./small_cnn.h5')
         # self.load_points('./2d_input.txt')
 
     def initialize_ui(self):
-        vertical_layout = QVBoxLayout()
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Inicializácia, rozloženie a zobrazenie grafických komponentov pre stránku.
+        """
+        vertical_layout = QVBoxLayout(self)
         vertical_layout.setContentsMargins(0, 0, 0, 0)
         vertical_layout.setSpacing(0)
-        button_wrapper = QWidget()
+        button_wrapper = QWidget(self)
         button_wrapper.setFixedHeight(50)
         vertical_layout.addWidget(button_wrapper)
 
-        button_layout = QHBoxLayout()
+        button_layout = QHBoxLayout(button_wrapper)
         button_layout.setSpacing(0)
 
-        open_load_layout = QHBoxLayout()
+        group_wrapper_open_load = QWidget(self)
+
+        open_load_layout = QHBoxLayout(group_wrapper_open_load)
         open_load_layout.setSpacing(5)
         open_load_layout.setContentsMargins(0, 0, 0, 0)
 
-        group_wrapper_open_load = QWidget()
+        group_wrapper_save = QWidget(self)
 
-        group_wrapper_save = QWidget()
-
-        self.__open_load_info_label.setText("<font color='orange'>Load keras model.</font>")
+        self.__load_ilabel.setText("<font color='orange'>Open Keras model.</font>")
 
         font = QtGui.QFont()
         font.setPointSize(10)
         font.setBold(True)
-        self.__open_load_info_label.setFont(font)
-        self.__save_model_info_label.setFont(font)
+        self.__load_ilabel.setFont(font)
+        self.__save_ilabel.setFont(font)
 
         # Button layout
         button_layout.setContentsMargins(0, 0, 0, 0)
 
         # Open model button
-        open_btn = QPushButton('Open model')
+        open_btn = QPushButton('Open model', group_wrapper_open_load)
         open_btn.clicked.connect(self.try_open_model)
         open_load_layout.addWidget(open_btn)
 
         # Load points button
-        load_btn = QPushButton('Load points')
+        load_btn = QPushButton('Load inputs', group_wrapper_open_load)
         load_btn.clicked.connect(self.try_load_points)
         open_load_layout.addWidget(load_btn)
 
         # Load labels button
-        load_labels_btn = QPushButton('Load labels')
+        load_labels_btn = QPushButton('Load labels', group_wrapper_open_load)
         load_labels_btn.clicked.connect(self.try_load_labels)
         open_load_layout.addWidget(load_labels_btn)
-        open_load_layout.addWidget(self.__open_load_info_label, alignment=QtCore.Qt.AlignRight)
+        open_load_layout.addWidget(self.__load_ilabel, alignment=QtCore.Qt.AlignRight)
 
         # Save model button
-        save_btn = QPushButton('Save model')
+        save_btn = QPushButton('Save model', group_wrapper_save)
         save_btn.clicked.connect(self.save_model)
 
         # Save model layout
-        save_layout = QHBoxLayout()
+        save_layout = QHBoxLayout(group_wrapper_save)
         save_layout.setSpacing(5)
         save_layout.setContentsMargins(0, 0, 0, 0)
-        save_layout.addWidget(self.__save_model_info_label)
+        save_layout.addWidget(self.__save_ilabel)
         save_layout.addWidget(save_btn)
 
-        group_wrapper_save.setLayout(save_layout)
+        # group_wrapper_save.setLayout(save_layout)
 
-        group_wrapper_open_load.setLayout(open_load_layout)
+        #group_wrapper_open_load.setLayout(open_load_layout)
 
         button_layout.addWidget(group_wrapper_open_load, alignment=QtCore.Qt.AlignLeft)
 
         button_layout.addWidget(group_wrapper_save, alignment=QtCore.Qt.AlignRight)
 
-        button_wrapper.setLayout(button_layout)
+        #button_wrapper.setLayout(button_layout)
 
         vertical_layout.addWidget(self.__mg_frame)
 
-        self.setLayout(vertical_layout)
+        #self.setLayout(vertical_layout)
 
     def try_open_model(self):
         """
         Popis
         ----------------------------------------------------------------------------------------------------------------
-        Načítanie vybraného modelu, pokiaľ bola zvolená nejaká cesta k súboru.
+        Zobrazí dialógové okno na výber Keras modelu. Ak bude zadaná nejaká cesta k tomuto súboru, bude cesta uložená a
+        model otvorený.
         """
-        file_path = QFileDialog.getOpenFileName(self, 'Load keras model', self.__file_path, 'Keras model (*.h5)')[0]
+        file_path = QFileDialog.getOpenFileName(self, 'Open Keras model', self.__file_path, 'Keras model (*.h5)')[0]
         if file_path != '':
             self.open_model(file_path)
 
     def try_load_labels(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Zobrazí dialógové okno na výber súboru obsahujucého vstupy. Súbory môžu byť typu .txt alebo .csv. Ak bola
+        zvolená nejaká cesta ku súboru, pokraćuje sa načítaním vstupu. Ak došlo k chybe, bude zobrazená vedľa tlačidla.
+        """
         if self.__keras_model is not None:
-            file_path = QFileDialog.getOpenFileName(self, 'Load labels', self.__file_path, 'Text or CSV files (*.txt *.csv)')[0]
+            file_path = \
+                QFileDialog.getOpenFileName(self, 'Load labels', self.__file_path, 'Text or CSV file (*.txt *.csv)')[0]
             if file_path != '':
                 error_message = self.__logic_layer.load_labels(file_path)
                 if error_message is not None:
-                    self.__open_load_info_label.setText("<font color='red'>{}</font>".format(error_message))
-                    self.__open_load_info_label.show()
+                    self.__load_ilabel.setText("<font color='red'>{}</font>".format(error_message))
+                    self.__load_ilabel.show()
                 else:
-                    self.__open_load_info_label.hide()
+                    self.__load_ilabel.hide()
         else:
-            self.__open_load_info_label.setText("<font color='red'>You have to load model first!</font>")
+            self.__load_ilabel.setText("<font color='red'>You have to load model first!</font>")
 
-    def open_model(self, filepath):
+    def open_model(self, file_path):
         """
         Popis:
         ----------------------------------------------------------------------------------------------------------------
-        Rozdelenie zadanej cesty k súboru na absolútnu cestu a názov súboru.
-        Načítanie súboru na základe cesty.
+        Načítanie súboru na základe cesty. Rozdelenie zadanej cesty k súboru na absolútnu cestu a názov súboru.
         Inicializácia logickej vrstvy, načítaným modelom.
-
         Parametre
         ----------------------------------------------------------------------------------------------------------------
-        :param filepath: aboslutná cesta k súboru.
+        :param file_path: aboslutná cesta k súboru.
         """
-        self.__file_path, self.__file_name = ntpath.split(filepath)
-        self.__keras_model = keras.models.load_model(filepath)
-        print(self.__keras_model.input_shape)
+        self.__file_path, self.__file_name = ntpath.split(file_path)
+        self.__keras_model = keras.models.load_model(file_path)
         self.__logic_layer.initialize(self.__keras_model)
-        self.__open_load_info_label.hide()
-        self.__save_model_info_label.hide()
+        self.__load_ilabel.hide()
+        self.__save_ilabel.hide()
 
     def try_load_points(self):
         """
@@ -187,31 +193,35 @@ class GraphPage(QWidget):
             input_shape = self.__keras_model.input_shape
             file_path = ''
             if len(input_shape) > 2:
-                msgBox = CustomMessageBox('Výber vstupu', 'Ako si prajete zvoliť vstup?', 'Jednotlivo', 'Priečinok',
-                                          'Zrušiť', 'Jednotlivo: manuálny výber viacerých obrázkov ' +
-                                          '\nPriečinok: priečinok obshujúci priečinky so vstupmi (priradí label)')
-
-                res = msgBox.exec_()
-
+                msgBox = CustomMessageBox('Load input', 'How would you like to load inputs?',
+                                          'Folder', 'Separately', 'Cancel',
+                                          'Folder: folder with labeled folders of images (assign labels)\n' +
+                                          'Separately: manually image choosing')
+                msgBox.exec_()
+                error_message = None
                 if msgBox.result() == 0:
-                    file_path = QFileDialog.getOpenFileNames(self, 'Load model input', self.__file_path,
+                    file_path = QFileDialog.getExistingDirectory(self, 'Choose folder', self.__file_path)
+                    error_message = self.__logic_layer.handle_images_input(file_path)
+                elif msgBox.result() == 1:
+                    file_path = QFileDialog.getOpenFileNames(self, 'Load inputs', self.__file_path,
                                                              'Image files (*.jpg *.png )')
                     if len(file_path[0]) != 0:
                         error_message = self.__logic_layer.handle_images_input(file_path[0])
-                elif msgBox.result() == 1:
-                    file_path = QFileDialog.getExistingDirectory(self, 'Zvoľte priečinok', self.__file_path)
-                    error_message = self.__logic_layer.handle_images_input(file_path)
                 else:
                     return
-                print(file_path)
+                if error_message is not None:
+                    self.__load_ilabel.setText("<font color='red'>{}</font>".format(error_message))
+                    self.__load_ilabel.show()
+                else:
+                    self.__load_ilabel.hide()
                 return
             else:
-                file_path = QFileDialog.getOpenFileName(self, 'Load model input', self.__file_path,
+                file_path = QFileDialog.getOpenFileName(self, 'Load input', self.__file_path,
                                                         'Text files (*.txt);;CSV files (*.csv)')[0]
             if file_path != '':
                 self.load_points(file_path)
         else:
-            self.__open_load_info_label.setText("<font color='red'>You have to load model first!</font>")
+            self.__load_ilabel.setText("<font color='red'>You have to load model first!</font>")
 
     def load_points(self, filepath: str):
         """
@@ -227,29 +237,29 @@ class GraphPage(QWidget):
         """
         error_message = self.__logic_layer.load_points(filepath)
         if error_message is not None:
-            self.__open_load_info_label.setText("<font color='red'>{}</font>".format(error_message))
-            self.__open_load_info_label.show()
+            self.__load_ilabel.setText("<font color='red'>{}</font>".format(error_message))
+            self.__load_ilabel.show()
         else:
-            self.__open_load_info_label.hide()
+            self.__load_ilabel.hide()
 
     def save_model(self):
         """
         Popis
         ----------------------------------------------------------------------------------------------------------------
-        Uloženie modelu.
+        Uloženie modelu za podmienky, že bol nejaký načítaný.
         """
         if self.__keras_model is not None:
             file_path = ''
-            QFileDialog.getSaveFileName(self, 'Save keras model', ntpath.join(self.__file_path, self.__file_name),
+            QFileDialog.getSaveFileName(self, 'Save Keras model', ntpath.join(self.__file_path, self.__file_name),
                                         'Keras model (*.h5)')[0]
             if file_path != '':
                 self.__file_path, self.__file_name = ntpath.split(file_path)
                 self.__keras_model.save(file_path)
-            self.__save_model_info_label.hide()
+            self.__save_ilabel.hide()
         else:
-            self.__save_model_info_label.show()
-            self.__save_model_info_label.setText('You have to load model first!')
-            self.__save_model_info_label.setStyleSheet("QLabel { color : red; }")
+            self.__save_ilabel.show()
+            self.__save_ilabel.setText('You have to load model first!')
+            self.__save_ilabel.setStyleSheet("QLabel { color : red; }")
 
 
 class MainGraphFrame(QWidget):
@@ -267,6 +277,8 @@ class MainGraphFrame(QWidget):
 
      :var self.__number_of_layers:   počet vrstiev načítanej neurónovej siete
 
+     :var self.__neural_layers:      obsahuje referenciu na vrstvy neurónovej siete.
+
      :var self.__name_to_order_dict: každej vrstve je postupne prideľované poradové číslo vrstvy, tak ako ide od
                                      začiatku neurónovej siete. Ako kľúč je použitý názov vrstvy.
 
@@ -274,35 +286,24 @@ class MainGraphFrame(QWidget):
                                      do dict. Jeho hodnotami sú názvy jedntlivých vrstiev.
                                      Ide o spätný dict k __name_to_order_dict.
 
-     :var self.__active_layers:      obsahuje poradové čísla aktívnych vrstiev, pre prídavanie a odoberanie vrstiev z
-                                     add_graph_fame
-
-     :var self.__input_panned:       obal pre komponenty InputDataFrame a PannedWindow. Umožňuje podľa potreby
-                                     roztiahnuť alebo zúžiť veľkosť input panelu na úkor PannedWindow, ktoré obsahuje
-                                     rámce s reprezentáciou jednotlivých vrstiev.
-
-     :var self.__graph_panned:       obal pre ScrollableWindow, ktoré obsahuje rámce v ktorých sú zobrazené jednotlivé
-                                     vrstvy.
+     :var self.__active_layers:      referencia na list, ktorý obsahuje poradové čísla aktívnych vrstiev. Je zdieľaný
+                                     s logickou vrstvou aplikácie.
 
      :var self.__options_frame:      okno, v ktorom sa zobrazujú možnosti pre zvolenú vrstvu.
 
-     :var self.__scroll_frame:       obsahuje grafické zobrazenie zvolených vrstiev neurónovej siete a
-                                     ComboboxAddRemoveFrame, v ktorom sú volené vrstvy, ktoré chceme zobraziť
+     :var self.scrollable_frame:     Qt skrolovacie okno, obalom pre QtWidget scrollbar content.
 
-     :var self.__add_graph_frame:    combobox, z ktorého si vyberáme jednotlivé, ešte neaktívne vrstvy, ktoré tlačidlom
-                                     následne zobrazíme. Zobrazuje sa, len ak nie sú zobrazené ešte všetky vrstvy.
+     :var self.__scrollbar_content:  udržuje v sebe jednotlivé GraphFrame, ktoré obsahujú grafyy a ovládače váh.
+
+     :var self.__graph_area_layout:  rozloženie komponentov v scrollbar_content widgete.
+
+     :var self.__options_frame:      odkaz na okno s možnosťami zobrazenia vrstvy.
+
+     :self.__add_remove_layer_rc:    combobox na výber vrstvy. Po vybratí sa vrstva zobrazí a odstráni z comboboxu.
      """
-
     def __init__(self, *args, **kwargs):
-        """
-        :param parent: nadradený tkinter widget
-        :type parent: tk.Widget
-        :param logic_layer: odkaz na logickú vrstvu
-        :type logic_layer: GraphLogicLayer
-        """
         super().__init__(*args, **kwargs)
 
-        # self.__logic_layer = logic_layer
         self.__logic_layer = None
         self.__number_of_layers = 0
 
@@ -315,31 +316,31 @@ class MainGraphFrame(QWidget):
         self.__active_layers = []
 
         # Grafické komponenty.
-        self.scrollable_frame = QScrollArea()
+        self.scrollable_frame = QScrollArea(self)
 
-        self.__scrollbar_content = QWidget()
+        self.__scrollbar_content = QWidget(self)
 
-        self.__graph_area_layout = QHBoxLayout()
+        self.__graph_area_layout = QHBoxLayout(self.__scrollbar_content)
 
-        self.__options_frame = OptionsFrame()
+        self.__options_frame = OptionsFrame(self)
 
-        self.__add_remove_layer_rc = RemovingCombobox()
+        self.__add_remove_layer_rc = RemovingCombobox(self.__scrollbar_content)
 
         self.initialize_ui()
 
         self.__options_frame.hide_option_bar()
 
-        # layer_graph.clear()
-        # layer_graph.hide()
-        # self.__graph_area_layout.removeWidget(layer_graph)
-
     def initialize_ui(self):
-        horizontal_layout = QHBoxLayout()
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Inicializácia, rozloženie a zobrazenie grafických komponentov.
+        """
+        horizontal_layout = QHBoxLayout(self)
         horizontal_layout.setContentsMargins(0, 0, 5, 0)
         horizontal_layout.setSpacing(0)
 
         self.__options_frame.setFixedWidth(320)
-        self.__options_frame.setSizePolicy(Qt.QSizePolicy.Minimum, Qt.QSizePolicy.Minimum)
 
         self.scrollable_frame.setWidgetResizable(True)
         horizontal_layout.addWidget(self.__options_frame, alignment=QtCore.Qt.AlignLeft)
@@ -357,23 +358,21 @@ class MainGraphFrame(QWidget):
 
         self.__graph_area_layout.addWidget(self.__add_remove_layer_rc)
 
-        self.setLayout(horizontal_layout)
+        # self.setLayout(horizontal_layout)
 
     def initialize(self, logic_layer: GraphLogicLayer):
         """
         Popis
         ----------------------------------------------------------------------------------------------------------------
-        Inicializačná funkcia. Inicializuje všetky potrbné komponenty tejto vrstvy.
+        Inializuje atribúty triedy.
         Vytvorí predbežný zoznam názvov jednotlivých vrstiev. Po inicializácií AddRemoveComboboxFrame budú získane
         unikátne mená, ktoré sa použijú ako kľúče v slovníku.
-
         Na základe unikátnych mien je vytvorený slovník, ktorý prevádza meno vrstvy na jej poradové číslo a spätný
         slovník, ktorý prevádza poradové číslo na názov vrstvy.
 
         Parametre
         ----------------------------------------------------------------------------------------------------------------
-        :param neural_layers: zoznam NeuralLayer, ktoré bude možné zobraziť.
-        :param active_layer:  refenrencia na zoznam aktívnych vrstiev.
+        :param logic_layer: referencia na logickú vrstvu aplikácie.
         """
         self.__options_frame.initialize()
 
@@ -394,8 +393,8 @@ class MainGraphFrame(QWidget):
 
         # Inicializácia AddRemoveComboboxFrame. Funkcia navracia list unikátnych názvov vrstiev.
         # Unikátne názvy su použité ako kľúče v slovníku.
-        unique_name_list = self.__add_remove_layer_rc.initialize(layer_name_list, self.show_layer, 'Add layer', True,
-                                                                 'Select layer')
+        unique_name_list = self.__add_remove_layer_rc.initialize(layer_name_list, self.show_layer,
+                                                                 'Add layer', True, 'Select layer')
         for i, layerName in enumerate(unique_name_list):
             self.__neural_layers[i].layer_name = layerName
             self.__order_to_name_dict[i] = layerName
@@ -456,7 +455,6 @@ class MainGraphFrame(QWidget):
         Parametre
         ----------------------------------------------------------------------------------------------------------------
         :param layer_number: číslo vrstvy, ktorá má byť skrytá
-        :type layer_number: int
         """
         if layer_number in self.__active_layers:
             layer_name = self.__order_to_name_dict[layer_number]
@@ -472,11 +470,25 @@ class MainGraphFrame(QWidget):
                 self.__options_frame.hide_option_bar()
 
     def show_layer_options_frame(self, layer_number):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Zobrazí na panele, možnosti zobrazenia pre požadovanú vrstvu.
+
+        Parametre
+        ----------------------------------------------------------------------------------------------------------------
+        :param layer_number: číslo vrstvy, ktorej možnosti majú byť zobrazené.
+        """
         if 0 <= layer_number < self.__number_of_layers:
             layer = self.__neural_layers[layer_number]
             self.__options_frame.initialize_with_layer_config(layer, layer.config)
 
     def apply_changes_on_options_frame(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Aplikuje zmeny na panel možností.
+        """
         self.__options_frame.update_selected_config()
 
     def update_active_options_layer(self, start_layer):
@@ -485,6 +497,7 @@ class MainGraphFrame(QWidget):
     def update_layer_if_active(self, neural_layer_ref):
         if neural_layer_ref == self.__options_frame.active_layer:
             self.apply_changes_on_options_frame()
+
 
 class OptionsFrame(QWidget):
     def __init__(self, *args, **kwargs):
@@ -545,7 +558,6 @@ class OptionsFrame(QWidget):
         :param logicalLayer: odkaz na logickú vrstvu grafu
         """
         super().__init__(*args, **kwargs)
-        # self.__graph_logic = logicalLayer
         font = QtGui.QFont()
         font.setPointSize(10)
         self.setFont(font)
@@ -555,15 +567,15 @@ class OptionsFrame(QWidget):
         self.__changed_config = None
         self.__active_layer = None
         self.__layer_name_label = QLabel('Layer name')
-        self.__bar_wrapper = QGroupBox('Layer Options')
-        self.__choose_cords_gbox = QGroupBox('Choose Cords')
-        self.__possible_cords_label = QLabel('Possible Cords')
-        self.__choose_label_gbox = QGroupBox('Label names')
+        self.__bar_wrapper = QGroupBox('Layer options')
+        self.__choose_cords_gbox = QGroupBox('Displayed cords')
+        self.__possible_cords_label = QLabel('Possible cords')
+        self.__choose_label_gbox = QGroupBox('Axis name')
         self.__graph_view_gbox = QGroupBox('Graph view options')
-        self.__color_labels_cb = QCheckBox('Color labels')
+        self.__color_labels_cb = QCheckBox('Color according to label')
         self.__lock_view_cb = QCheckBox('Lock view')
         self.__3d_view_cb = QCheckBox('3D view')
-        self.__show_polygon_cb = QCheckBox('Show polygon')
+        self.__show_polygon_cb = QCheckBox('Show space grid')
         self.__dim_reduction_gbox = QGroupBox('Dimension reduction')
         self.__actual_used_reduction_method = QLabel('Actual used: No method')
         self.__no_method_rb = QRadioButton('No method')
@@ -571,6 +583,7 @@ class OptionsFrame(QWidget):
         self.__t_SNE_rb = QRadioButton('t-SNE')
         self.__pca_info_gbox = QGroupBox('PCA information')
         self.__var_expl_lb = QListWidget()
+        self.__var_expl_lb.currentRowChanged.connect(self.show_PCA_loading_scores)
         self.__load_scores_lb = QListWidget()
         self.__t_sne_parameter_gbox = QGroupBox('t-SNE parameters')
         self.__use_method_btn = QPushButton()
@@ -908,20 +921,27 @@ class OptionsFrame(QWidget):
         ----------------------------------------------------------------------------------------------------------------
         Vypísanie aktuálnych informácii o PCA.
         """
+        self.__var_expl_lb.clear()
+        self.__load_scores_lb.clear()
         variance_series = self.__changed_config['PCA_config']['percentage_variance']
         if variance_series is not None:
-            self.__var_expl_lb.clear()
             pc_labels = variance_series.index
             for i, label in enumerate(pc_labels):
                 self.__var_expl_lb.insertItem(i, '{}: {:.2f}%'.format(label, round(variance_series[label], 2)))
-            loading_scores = self.__changed_config['PCA_config']['largest_influence']
 
+            self.show_PCA_loading_scores(0)
+
+    def show_PCA_loading_scores(self, component_number):
+        if component_number > -1:
             self.__load_scores_lb.clear()
+            loading_scores = self.__changed_config['PCA_config']['largest_influence'][component_number]
+
             # Zoradenie významností jednotlivých neurónov pri PCA
             sorted_loading_scores = loading_scores.abs().sort_values(ascending=False)
             sorted_indexes = sorted_loading_scores.index.values
             for i, label in enumerate(sorted_indexes):
                 self.__load_scores_lb.insertItem(i, '{}: {:.4f}'.format(label, round(loading_scores[label], 4)))
+
 
     def update_active_options_layer(self, start_layer=-1):
         """
@@ -937,7 +957,7 @@ class OptionsFrame(QWidget):
         """
         if self.__active_layer is not None and self.__changed_config is not None:
             actual_method = self.__changed_config['used_method']
-            if actual_method == 'PCA' and start_layer < self.__active_layer.layer_number:
+            if actual_method == 'PCA' and start_layer <= self.__active_layer.layer_number:
                 self.update_PCA_information()
 
     def apply_t_SNE_options_if_changed(self):

@@ -4,14 +4,12 @@ import math
 matplotlib.use('Qt5Agg')
 from PyQt5 import QtCore
 from QtGraphicalComponents import *
-
 import numpy as np
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
 from matplotlib import backend_bases
 from matplotlib.figure import Figure
 import mpl_toolkits.mplot3d as plt3d
 from mpl_toolkits.mplot3d import proj3d
-BASIC_POINT_color = '#04B2D9'
 
 
 class PlotingFrame(QWidget):
@@ -375,13 +373,12 @@ class LayerWeightControllerFrame(QWidget):
         self._bias_reference = None
         self._active_slider_dict = {}
         self._slider_dict = {}
-        self._possible_number_of_sliders = 0
+        self._number_of_sliders = 0
 
         self._scrollable_window = QScrollArea()
         self._scroll_area_layout = QVBoxLayout()
         self._scroll_area_content = QWidget()
         self._add_slider_rc = RemovingCombobox()
-
         self.initialize_ui()
 
     def initialize_ui(self):
@@ -414,13 +411,33 @@ class LayerWeightControllerFrame(QWidget):
 
     def handle_combobox_input(self, item: tuple):
         if item[0] >= 0:
-            self.add_slider(item[1])
+            if item[1] not in self._active_slider_dict.keys():
+                if len(self._active_slider_dict) + 1 > 1500:
+                    if self.show_warning() != 0:
+                        return
+                self.add_slider(item[1])
         else:
             list_of_remaining = self._add_slider_rc.get_list_of_visible()
             # prve dva su default a vsetky, to treba preskocit
             list_of_remaining = list_of_remaining[1:].copy()
+            if len(self._active_slider_dict) + len(list_of_remaining) > 1500:
+                if self.show_warning() != 0:
+                    return
             for name in list_of_remaining:
                 self.add_slider(name)
+
+    def show_warning(self):
+        warning_dialog = QMessageBox()
+        warning_dialog.setIcon(QMessageBox.Warning)
+        warning_dialog.setWindowTitle('Warning')
+        warning_dialog.setText('You are going to add another slider, this may lead to performance issues.')
+        warning_dialog.setInformativeText('Would you like to add slider anyway?')
+        warning_dialog.addButton('Yes', QMessageBox.YesRole)
+        default = warning_dialog.addButton('No', QMessageBox.NoRole)
+        warning_dialog.setDefaultButton(default)
+        warning_dialog.exec_()
+        return warning_dialog.result()
+
 
     def add_slider(self, slider_name):
         pass
@@ -455,7 +472,6 @@ class NoFMWeightControllerFrame(LayerWeightControllerFrame):
     def initialize(self, controller, layer_weights: list, layer_bias: list):
         for weight_slider in self._active_slider_dict.values():
             weight_slider.clear()
-
         self._controller = controller
         self._possible_number_of_sliders = 0
         self._slider_dict = {}
@@ -465,10 +481,11 @@ class NoFMWeightControllerFrame(LayerWeightControllerFrame):
 
         tmp_ordered_sliders_names = []
         tmp_ordered_sliders_config = []
+
         if layer_weights is not None:
             for start_neuron in range(len(self._weights_reference)):
                 for end_neuron in range(len(self._weights_reference[start_neuron])):
-                    layer_name = 'Vaha {}-{}'.format(start_neuron, end_neuron)
+                    layer_name = 'Weight {}-{}'.format(start_neuron, end_neuron)
                     tmp_ordered_sliders_names.append(layer_name)
                     tmp_ordered_sliders_config.append((True, start_neuron, end_neuron))
         if layer_bias is not None:
@@ -480,27 +497,27 @@ class NoFMWeightControllerFrame(LayerWeightControllerFrame):
         self._possible_number_of_sliders = len(tmp_ordered_sliders_names)
 
         final_name_list = self._add_slider_rc.initialize(tmp_ordered_sliders_names, self.handle_combobox_input,
-                                                          'Add weight', False, 'Select weight')
+                                                         'Add weight', False, 'Select weight')
+
         for i, slider_name in enumerate(final_name_list):
             self._slider_dict[slider_name] = tmp_ordered_sliders_config[i]
         self.addSlider_visibility_test()
-        special = 'Vsetky'
+
+        special = 'Show all'
         special = self._add_slider_rc.add_special(special)
 
     def add_slider(self, slider_name: str):
-        if slider_name not in self._active_slider_dict.keys():
-            slider_config = self._slider_dict[slider_name]
-            if slider_config[0]:
-                self.create_weight_slider(slider_name, slider_config)
-            else:
-                self.create_bias_slider(slider_name, slider_config)
-            self._add_slider_rc.hide_item(slider_name)
+        slider_config = self._slider_dict[slider_name]
+        if slider_config[0]:
+            self.create_weight_slider(slider_name, slider_config)
+        else:
+            self.create_bias_slider(slider_name, slider_config)
+        self._add_slider_rc.hide_item(slider_name)
 
     def create_weight_slider(self, slider_name, slider_config):
         start_neuron = slider_config[1]
         end_neuron = slider_config[2]
-
-        slider_name = 'Vaha {}-{}'.format(start_neuron, end_neuron)
+        slider_name = 'Weight {}-{}'.format(start_neuron, end_neuron)
         slider = VariableDisplaySlider()
         slider.setMinimumHeight(60)
         slider.initialize(slider_name, -1, 1, slider_name, self.on_slider_change, self.remove_slider,
@@ -511,7 +528,6 @@ class NoFMWeightControllerFrame(LayerWeightControllerFrame):
 
     def create_bias_slider(self, slider_name, slider_config):
         end_neuron = slider_config[1]
-
         slider = VariableDisplaySlider()
         slider.setMinimumHeight(60)
         slider.initialize(slider_name, -10, 10, slider_name, self.on_slider_change, self.remove_slider,
@@ -530,7 +546,6 @@ class FMWeightControllerFrame(LayerWeightControllerFrame):
             weight_slider.clear()
 
         self._controller = controller
-        self._possible_number_of_sliders = 0
         self._slider_dict = {}
         self._active_slider_dict = {}
         self._weights_reference = layer_weights
@@ -551,16 +566,15 @@ class FMWeightControllerFrame(LayerWeightControllerFrame):
             for channel_i in range(weight_shape[2]):
                 for row_i in range(weight_shape[0]):
                     for col_i in range(weight_shape[1]):
-                        key = f'Channel{channel_i}: weight {row_i}-{col_i}'
+                        key = f'Channel{channel_i}: Weight {row_i}-{col_i}'
                         tmp_ordered_sliders_names.append(key)
                         tmp_ordered_configuration.append([True, feature_map_number, channel_i, row_i, col_i])
         if self._bias_reference is not None:
             tmp_ordered_sliders_names.append(f'Bias{feature_map_number}')
             tmp_ordered_configuration.append([False, feature_map_number])
 
-
         tmp_ordered_sliders_names = self._add_slider_rc.initialize(tmp_ordered_sliders_names, self.handle_combobox_input,
-                                       'Add weight', False, 'Select weight')
+                                                                   'Add weight', False, 'Select weight')
 
         for i, key in enumerate(tmp_ordered_sliders_names):
             self._slider_dict[key] = tmp_ordered_configuration[i]
@@ -568,27 +582,16 @@ class FMWeightControllerFrame(LayerWeightControllerFrame):
         self._possible_number_of_sliders = len(tmp_ordered_sliders_names)
 
         self.addSlider_visibility_test()
-        special = 'Vsetky'
+        special = 'Show all'
         special = self._add_slider_rc.add_special(special)
 
     def add_slider(self, slider_name: str):
-        if slider_name not in self._active_slider_dict.keys():
-            slider_config = self._slider_dict[slider_name]
-            if slider_config[0]:
-                self.create_weight_slider(slider_name, slider_config)
-            else:
-                self.create_bias_slider(slider_name, slider_config)
-            self._add_slider_rc.hide_item(slider_name)
-
-    def handle_combobox_input(self, item: tuple):
-        if item[0] >= 0:
-            self.add_slider(item[1])
+        slider_config = self._slider_dict[slider_name]
+        if slider_config[0]:
+            self.create_weight_slider(slider_name, slider_config)
         else:
-            list_of_remaining = self._add_slider_rc.get_list_of_visible()
-            # prve dva su default a vsetky, to treba preskocit
-            list_of_remaining = list_of_remaining[1:].copy()
-            for name in list_of_remaining:
-                self.add_slider(name)
+            self.create_bias_slider(slider_name, slider_config)
+        self._add_slider_rc.hide_item(slider_name)
 
     def create_weight_slider(self, slider_name, slider_config):
         feature_map = self._weights_reference[:, :, :, slider_config[1]]
@@ -604,11 +607,9 @@ class FMWeightControllerFrame(LayerWeightControllerFrame):
     def create_bias_slider(self, slider_name, slider_config):
         slider = VariableDisplaySlider()
         slider.setMinimumHeight(60)
-        slider.initialize(slider_name, -10, 11, slider_name, self.on_slider_change, self.remove_slider,
+        slider.initialize(slider_name, -10, 10, slider_name, self.on_slider_change, self.remove_slider,
                           self._bias_reference, slider_config[1])
         self._scroll_area_layout.insertWidget(self._scroll_area_layout.count() - 1, slider)
         self._active_slider_dict[slider_name] = slider
         self.addSlider_visibility_test()
 
-    def on_slider_change(self, value):
-        self._controller.weight_bias_change_signal()

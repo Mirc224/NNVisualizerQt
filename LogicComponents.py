@@ -12,9 +12,8 @@ from sklearn.manifold import TSNE
 from tensorflow import keras
 
 from AdditionalComponents import *
-
-BASIC_POINT_COLOR = '#04B2D9'
 from PlotAndControlComponents import *
+BASIC_POINT_COLOR = '#04B2D9'
 
 
 class GraphLogicLayer:
@@ -250,6 +249,7 @@ class GraphLogicLayer:
             if layer_number >= start_layer:
                 self.__neural_layers[layer_number].apply_changes()
                 self.__neural_layers[layer_number].redraw_graph_if_active()
+        self.__mg_frame.update_active_options_layer(start_layer)
 
     def redraw_active_graphs(self, start_layer=0):
         """
@@ -314,7 +314,6 @@ class GraphLogicLayer:
                         self.__keras_model.input_shape)
                     labels_tmp += [dir_name for _ in range(len(images_arr_list))]
                     input_data_tmp += images_arr_list
-
                 if len(input_data_tmp) != 0:
                     self.__input_data = np.array(input_data_tmp).reshape(-1, *self.__keras_model.input_shape[-3:])
                     self.reset_points_config()
@@ -327,7 +326,6 @@ class GraphLogicLayer:
                     self.__points_config['label_color'] = self.get_label_color_list(labels_tmp)
                 else:
                     return 'No images loaded!'
-            print('idem ratat')
             self.recalculate()
             self.set_default_cords_for_each_layer()
             self.broadcast_changes()
@@ -484,7 +482,6 @@ class GraphLogicLayer:
         for img_path in img_path_list:
             img_array = cv2.imread(img_path, flags=flags)
             new_array = cv2.resize(img_array, (img_height, img_width))
-            print(new_array)
             list_of_images_arrays.append(new_array)
         return list_of_images_arrays
 
@@ -532,8 +529,8 @@ class NeuralLayer:
         Aribúty
         --------
         :var self.__graph_frame: udržuje v sebe triedu GraphFrame, ktorá vytvá zobrazovací graf a ovládač váh
-        :var self.__layer_name: názov vrstvy
-        :var self.__layer_number: poradové číslo vrstvy
+        :var self._layer_name: názov vrstvy
+        :var self._layer_number: poradové číslo vrstvy
         :var self.__point_cords: referencia na súradnice bodov v danej vrstve. (hodnoy sa menia v GraphLogicLayer)
         :var self.__displayed_cords: obsahuje súradnice, ktoré budú zobrazené v grafe. Referenciu na tento objekt
                                      obsahuje aj PlotingFrame
@@ -612,7 +609,6 @@ class NeuralLayer:
         # Počet súradníc ktoré sa majú zobraziť určíme ako menšie z dvojice čísel 3 a počet dimenzií, pretože max počet,
         # ktorý bude možno zobraziť je max 3
         axis_default_names = ['Label X', 'Label Y', 'Label Z']
-        self.__neuron_labels = []
         self.__pc_labels = []
         self.__points_method_cords = []
         axis_labels = []
@@ -731,21 +727,20 @@ class NeuralLayer:
                 self.__graph_frame.plotting_frame.line_tuples = list(zip(tmp1, tmp2))
 
     def set_displayed_cords(self):
-        if self.__has_feature_maps:
-            used_method = self.__layer_config['used_method']
-            if used_method == 'No method':
-                if len(self.__points_method_cords) != 0:
-                    feature_map_points = self.__points_method_cords[self.__selected_feature_map, :, :, :].transpose()
-                    self.__graph_frame.plotting_frame.points_cords = feature_map_points[:, self.__used_cords[0],
-                                                                     self.__used_cords[1]].transpose()
-                    print(feature_map_points)
-                    print(feature_map_points[:, self.__used_cords[0], self.__used_cords[1]].transpose())
+        if self.__graph_frame is not None:
+            if self.__has_feature_maps:
+                used_method = self.__layer_config['used_method']
+                if used_method == 'No method':
+                    if len(self.__points_method_cords) != 0:
+                        feature_map_points = self.__points_method_cords[self.__selected_feature_map, :, :, :].transpose()
+                        self.__graph_frame.plotting_frame.points_cords = feature_map_points[:, self.__used_cords[0],
+                                                                         self.__used_cords[1]].transpose()
+                else:
+                    if len(self.__points_method_cords) != 0:
+                        self.__graph_frame.plotting_frame.points_cords = self.__points_method_cords[self.__used_cords]
             else:
                 if len(self.__points_method_cords) != 0:
                     self.__graph_frame.plotting_frame.points_cords = self.__points_method_cords[self.__used_cords]
-        else:
-            if len(self.__points_method_cords) != 0:
-                self.__graph_frame.plotting_frame.points_cords = self.__points_method_cords[self.__used_cords]
 
     def apply_no_method(self):
         if self.__has_feature_maps:
@@ -754,11 +749,10 @@ class NeuralLayer:
             self.__points_method_cords = self.__point_cords.copy()
 
     def apply_PCA(self):
+        np.seterr(divide='ignore', invalid='ignore')
         if self.__has_feature_maps:
             feature_map_points = self.__point_cords[self.__selected_feature_map, :, :, :].transpose()
             flattened = np.array([xi.flatten() for xi in feature_map_points])
-            # print(flattened)
-            # print(flattened.shape)
             scaled_data = preprocessing.StandardScaler().fit_transform(flattened)
             pca = PCA()
             pca.fit(scaled_data)
@@ -770,8 +764,11 @@ class NeuralLayer:
                 self.__layer_config['PCA_config']['percentage_variance'] = pd.Series(
                     np.round(pca.explained_variance_ratio_ * 100, decimals=1),
                     index=self.__pc_labels[:number_of_pcs_indexes])
-                self.__layer_config['PCA_config']['largest_influence'] = pd.Series(pca.components_[0],
+                self.__layer_config['PCA_config']['largest_influence'] = pd.DataFrame(pca.components_.transpose(),
                                                                                    index=self.__activation_nodes_labels)
+                # self._layer_config['PCA_config']['largest_influence'] = pd.Series(pca.components_[0],
+                #                                                                    index=self.__activation_nodes_labels)
+
         else:
             points_cords = self.__point_cords.transpose()
             scaled_data = preprocessing.StandardScaler().fit_transform(points_cords)
@@ -832,10 +829,8 @@ class NeuralLayer:
             self.__graph_frame.redraw_graph()
 
     def use_config(self):
-        print('pouzivam config')
         if self.__visible:
             if self.__layer_config['apply_changes']:
-                print('zmenene')
                 self.apply_changes()
                 self.__layer_config['cords_changed'] = False
                 self.__layer_config['apply_changes'] = False
@@ -1015,415 +1010,6 @@ class NeuralLayer:
         self.__selected_feature_map = new_value
 
 
-class NoFMNeuralLayer:
-    def __init__(self, logicLayer: GraphLogicLayer, keras_layer: keras.layers.Layer,
-                 layer_number: int, *args, **kwargs):
-        '''
-        Popis
-        --------
-        Trieda predstavuje vrstvu neurónovej siete. V rámci nej budú do grafu volené zobrazované súradnice bodov.
-        Bude uskutočňovať PCA redukciu priestoru.
-
-        Aribúty
-        --------
-        :var self.__graph_frame: udržuje v sebe triedu GraphFrame, ktorá vytvá zobrazovací graf a ovládač váh
-        :var self.__layer_name: názov vrstvy
-        :var self.__layer_number: poradové číslo vrstvy
-        :var self.__point_cords: referencia na súradnice bodov v danej vrstve. (hodnoy sa menia v GraphLogicLayer)
-        :var self.__displayed_cords: obsahuje súradnice, ktoré budú zobrazené v grafe. Referenciu na tento objekt
-                                     obsahuje aj PlotingFrame
-
-        Parametre
-        --------
-        :param parent: nadradený tkinter Widget
-        :param mainGraph: odkaz na MainGraph
-        :param logicLayer: odkaz na logicku vrstvu GraphLogicLayer
-        :param args:
-        :param kwargs:
-        '''
-        self.__layer_name = keras_layer.get_config()['name']
-
-        self.__has_feature_maps = False
-        self.__selected_feature_map = -1
-        self.__output_shape = keras_layer.output_shape
-        if len(self.__output_shape) > 2:
-            self.__has_feature_maps = True
-
-        self.__number_of_outputs = self.__output_shape[-1]
-        self.__layer_number = layer_number
-        if len(keras_layer.get_weights()) != 0:
-            self.__layer_weights = keras_layer.get_weights()[0]
-            self.__layer_biases = keras_layer.get_weights()[1]
-        else:
-            self.__layer_weights = None
-            self.__layer_biases = None
-
-        self.__has_points = False
-
-        self.__calculate_polygon = False
-
-        self.__polygon_cords_tuples = None
-
-        self.__layer_config = {}
-
-        self.__points_config = None
-
-        self.__graph_frame = None
-
-        self.__logic_layer = logicLayer
-        self.__layer_number = layer_number
-        self.__point_cords = np.array([])
-        self.__used_cords = []
-        self.__neuron_labels = []
-        self.__pc_labels = []
-
-        self.__points_method_cords = []
-
-        self.__points_color = None
-
-        self.__visible = False
-        self.__weights_changed = False
-
-    def initialize(self, points_config):
-        '''
-        Parametre
-        --------
-        :param layer_number: poradové číslo vrstvy
-        :param layer_point_cords: refrencia na zoznam súradníc bodov pre danú vrstvu
-        :param layer_weights: referencia na hodnoty váh v danej vrstve. Hodnoty sú menené v controllery a používajú sa
-                              pri prepočítavaní súradnic v GraphLogicLayer.
-        :param layer_bias: referencia na hodnoty bias v danej vrstve. Podobne ako pr layer_weights
-        :param layer_name: názov vrstvy, je unikátny pre každú vrstvu, spolu s poradovým číslom sa používa ako ID.
-        '''
-        # Počet dimenzií, resp. počet súradníc zistíme podľa počtu vnorených listov.
-
-        self.__layer_config = {}
-        self.__point_cords = None
-        self.__points_config = points_config
-
-        # Počet súradníc ktoré sa majú zobraziť určíme ako menšie z dvojice čísel 3 a počet dimenzií, pretože max počet,
-        # ktorý bude možno zobraziť je max 3
-        number_of_cords = min(3, self.__number_of_outputs)
-        axis_default_names = ['Label X', 'Label Y', 'Label Z']
-        self.__neuron_labels = []
-        self.__pc_labels = []
-        self.__points_method_cords = []
-        used_t_sne_components = []
-        used_no_method_cords = []
-        used_PCA_components = []
-        axis_labels = []
-
-        if not self.__has_feature_maps:
-            for i in range(self.__number_of_outputs):
-                self.__neuron_labels.append(f'Neuron{i}')
-                self.__pc_labels.append(f'PC{i + 1}')
-        else:
-            number_of_rows = self.__output_shape[1]
-            number_of_cols = self.__output_shape[2]
-            for height_i in range(number_of_rows):
-                for width_i in range(number_of_cols):
-                    self.__neuron_labels.append(f'FM point {height_i}-{width_i}')
-                    self.__pc_labels.append(f'PC{height_i * number_of_cols + width_i + 1}')
-
-        for i in range(number_of_cords):
-            used_no_method_cords.append(i)
-            used_t_sne_components.append(i)
-            used_PCA_components.append(i)
-            axis_labels.append(axis_default_names[i])
-
-        self.__layer_config['apply_changes'] = False
-        self.__layer_config['cords_changed'] = False
-        self.__layer_config['has_feature_maps'] = self.__has_feature_maps
-        self.__layer_config['number_of_dimensions'] = self.__number_of_outputs
-        self.__layer_config['output_shape'] = self.__output_shape
-
-        self.__layer_config['layer_name'] = self.__layer_name
-        self.__layer_config['max_visible_dim'] = number_of_cords
-
-        self.__layer_config['axis_labels'] = axis_labels
-        self.__layer_config['number_of_samples'] = 0
-
-        self.__layer_config['possible_polygon'] = False
-        self.__layer_config['color_labels'] = False
-        self.__layer_config['show_polygon'] = False
-        self.__layer_config['locked_view'] = False
-
-        if number_of_cords >= 3:
-            self.__layer_config['draw_3d'] = True
-        else:
-            self.__layer_config['draw_3d'] = False
-        self.__layer_config['used_method'] = 'No method'
-        self.__layer_config['config_selected_method'] = 'No method'
-
-        no_method_config = {'displayed_cords': used_no_method_cords}
-        pca_config = {'displayed_cords': used_PCA_components,
-                      'n_possible_pc': 0,
-                      'percentage_variance': None,
-                      'largest_influence': None,
-                      'options_used_components': used_PCA_components.copy()}
-
-        number_t_sne_components = min(self.__number_of_outputs, 3)
-        used_config = {'n_components': number_t_sne_components,
-                       'perplexity': 30,
-                       'early_exaggeration': 12.0,
-                       'learning_rate': 200,
-                       'n_iter': 1000}
-
-        parameter_borders = {'n_components': (1, int, number_t_sne_components),
-                             'perplexity': (0, float, float("inf")),
-                             'early_exaggeration': (0, float, 1000),
-                             'learning_rate': (float("-inf"), float, float("inf")),
-                             'n_iter': (250, int, float("inf"))
-                             }
-
-        t_sne_config = {'used_config': used_config,
-                        'options_config': used_config.copy(),
-                        'parameter_borders': parameter_borders,
-                        'displayed_cords': used_t_sne_components}
-
-        self.__layer_config['no_method_config'] = no_method_config
-        self.__layer_config['PCA_config'] = pca_config
-        self.__layer_config['t_SNE_config'] = t_sne_config
-
-    def apply_changes(self):
-        '''
-        Popis
-        --------
-        Aplikovanie zmien po prepočítaní súradníc.
-        '''
-        # Je potrbné podľa navolených zobrazovaných súradníc priradiť z prepočítaných jednotlivé súradnice do súradníc
-        # zobrazovaných.
-        self.set_used_cords()
-        if self.__has_points:
-            used_method = self.__layer_config['used_method']
-            if used_method == 'No method':
-                self.apply_no_method()
-            elif used_method == 'PCA':
-                self.apply_PCA()
-            elif used_method == "t-SNE":
-                self.apply_t_SNE()
-            self.set_points_for_graph()
-
-    def set_points_for_graph(self):
-        used_method = self.__layer_config['used_method']
-        self.set_displayed_cords()
-        if used_method == 'No method':
-            self.set_displayed_cords_for_polygon()
-
-    def set_used_cords(self):
-        used_method = self.__layer_config['used_method']
-        if used_method == 'No method':
-            self.__used_cords = self.__layer_config['no_method_config']['displayed_cords']
-        elif used_method == 'PCA':
-            self.__used_cords = self.__layer_config['PCA_config']['displayed_cords']
-        elif used_method == 't-SNE':
-            self.__used_cords = self.__layer_config['t_SNE_config']['displayed_cords']
-
-    def set_displayed_cords_for_polygon(self):
-        if self.__polygon_cords_tuples is not None:
-            if self.__graph_frame is not None:
-                tmp1 = self.__polygon_cords_tuples[0][self.__used_cords].transpose()
-                tmp2 = self.__polygon_cords_tuples[1][self.__used_cords].transpose()
-                self.__graph_frame.plotting_frame.line_tuples = list(zip(tmp1, tmp2))
-
-    def set_displayed_cords(self):
-        self.__graph_frame.plotting_frame.points_cords = self.__points_method_cords[self.__used_cords]
-
-    def apply_no_method(self):
-        # self.__used_cords = self.__layer_config['no_method_config']['displayed_cords']
-        self.__points_method_cords = self.__point_cords[self.__used_cords]
-
-    def apply_PCA(self):
-        pca_config = self.__layer_config['PCA_config']
-        # self.__used_cords = pca_config['displayed_cords']
-        points_cords = self.__point_cords.transpose()
-        scaled_data = preprocessing.StandardScaler().fit_transform(points_cords)
-        pca = PCA()
-        pca.fit(scaled_data)
-        pca_data = pca.transform(scaled_data)
-        pcs_components_transpose = pca_data.transpose()
-        self.__points_method_cords = pcs_components_transpose
-        number_of_pcs_indexes = min(self.__number_of_outputs, pca.explained_variance_ratio_.size)
-        if number_of_pcs_indexes > 0:
-            self.__layer_config['PCA_config']['percentage_variance'] = pd.Series(
-                np.round(pca.explained_variance_ratio_ * 100, decimals=1),
-                index=self.__pc_labels[:number_of_pcs_indexes])
-            self.__layer_config['PCA_config']['largest_influence'] = pd.Series(pca.components_[0],
-                                                                               index=self.__neuron_labels)
-
-    def apply_t_SNE(self):
-        t_sne_config = self.__layer_config['t_SNE_config']
-        # self.__used_cords = t_sne_config['displayed_cords']
-        points_cords = self.__point_cords.transpose()
-        number_of_components = t_sne_config['used_config']['n_components']
-        tsne = TSNE(**t_sne_config['used_config'])
-        transformed_cords = tsne.fit_transform(points_cords).transpose()
-        self.__points_method_cords = transformed_cords
-
-    def clear(self):
-        '''
-        Popis
-        --------
-        Používat sa pri mazaní. Vyčistí premenné a skryje danú vrstvu.
-        '''
-        if self.__graph_frame is not None:
-            self.__graph_frame.clear()
-            self.__graph_frame = None
-
-    def signal_change(self):
-        self.__logic_layer.signal_change_on_layer(self.__layer_number)
-
-    def set_polygon_cords(self):
-        self.__logic_layer.set_polygon_cords(self.__layer_number)
-        self.apply_changes()
-
-    def require_graphs_redraw(self):
-        self.__logic_layer.redraw_active_graphs(-1)
-
-    def redraw_graph_if_active(self):
-        if self.__graph_frame is not None:
-            self.__graph_frame.redraw_graph()
-
-    def use_config(self):
-        print('pouzivam config')
-        if self.__visible:
-            if self.__layer_config['apply_changes']:
-                print('zmenene')
-                self.apply_changes()
-                self.__layer_config['cords_changed'] = False
-                self.__layer_config['apply_changes'] = False
-            elif self.__layer_config['cords_changed']:
-                self.set_used_cords()
-                self.set_points_for_graph()
-                self.__layer_config['cords_changed'] = False
-            self.__graph_frame.apply_config(self.__layer_config)
-
-    def create_graph_frame(self, options_command, hide_command):
-        if self.__graph_frame is not None:
-            self.__graph_frame.clear()
-            self.__graph_frame = None
-        self.__graph_frame = GraphFrame(self.__has_feature_maps)
-        self.__graph_frame.initialize(self, options_command, hide_command)
-
-        self.__visible = True
-        return self.__graph_frame
-
-    def __del__(self):
-        print('neural layer destroyed')
-
-    ##############################  GETTERS SETTERS ############################################
-    @property
-    def layer_name(self):
-        return self.__layer_name
-
-    @layer_name.setter
-    def layer_name(self, name):
-        self.__layer_config['layer_name'] = name
-        self.__layer_name = name
-
-    @property
-    def layer_number(self):
-        return self.__layer_number
-
-    @layer_number.setter
-    def layer_number(self, new_value):
-        self.__layer_number = new_value
-
-    @property
-    def config(self):
-        return self.__layer_config
-
-    @property
-    def points_cords(self):
-        return self.__point_cords
-
-    @property
-    def points_config(self):
-        return self.__points_config
-
-    @points_config.setter
-    def points_config(self, value):
-        self.__points_config = value
-
-    @points_cords.setter
-    def point_cords(self, new_cords):
-        self.__point_cords = new_cords
-        self.__layer_config['number_of_samples'] = len(new_cords.transpose())
-        if self.__point_cords.size == 0:
-            self.__has_points = False
-        else:
-            self.__has_points = True
-
-    @property
-    def polygon_cords_tuples(self):
-        return self.__polygon_cords_tuples
-
-    @property
-    def possible_polygon(self):
-        return self.__layer_config['possible_polygon']
-
-    @possible_polygon.setter
-    def possible_polygon(self, value):
-        self.__layer_config['possible_polygon'] = value
-
-    @polygon_cords_tuples.setter
-    def polygon_cords_tuples(self, new_cords_tuples):
-        self.__polygon_cords_tuples = new_cords_tuples
-        if self.__polygon_cords_tuples is not None:
-            self.__layer_config['possible_polygon'] = True
-        else:
-            self.__layer_config['possible_polygon'] = False
-            self.__displayed_lines_cords = None
-
-    @property
-    def possible_color_labels(self):
-        return self.__points_config['label_color'] is not None
-
-    @property
-    def layer_weights(self):
-        return self.__layer_weights
-
-    @property
-    def layer_biases(self):
-        return self.__layer_biases
-
-    @property
-    def calculate_polygon(self):
-        return self.__calculate_polygon
-
-    @calculate_polygon.setter
-    def calculate_polygon(self, value):
-        self.__calculate_polygon = value
-
-    @property
-    def point_color(self):
-        return self.__points_color
-
-    @point_color.setter
-    def point_color(self, new_value):
-        self.__points_color = new_value
-
-    @property
-    def graph_frame(self):
-        return self.__graph_frame
-
-    @graph_frame.setter
-    def graph_frame(self, value):
-        self.__graph_frame = value
-        if self.__graph_frame is not None:
-            self.__visible = True
-        else:
-            self.__visible = False
-
-    @property
-    def number_of_outputs(self):
-        return self.__number_of_outputs
-
-    @property
-    def output_shape(self):
-        return self.__output_shape
-
-
 class GraphFrame(QFrame):
     def __init__(self, has_feature_maps, *args, **kwargs):
         '''
@@ -1443,7 +1029,7 @@ class GraphFrame(QFrame):
         '''
         super().__init__(*args, **kwargs)
         self.__neural_layer = None
-        self.__has_feature_maps = has_feature_maps
+        self._has_feature_maps = has_feature_maps
         self.__options_btn = QPushButton()
         self.__hide_btn = QPushButton()
         self.__graph = PlotingFrame()
@@ -1451,7 +1037,7 @@ class GraphFrame(QFrame):
         self.__weight_dict = {}
         self.__weight_names_ordered = []
 
-        if self.__has_feature_maps:
+        if self._has_feature_maps:
             self.__feature_map_cb = QComboBox()
             self.__weight_controller = FMWeightControllerFrame()
         else:
@@ -1471,7 +1057,7 @@ class GraphFrame(QFrame):
         layout.addLayout(buttons_wrapper_layout)
         self.__options_btn.setText('Options')
         buttons_wrapper_layout.addWidget(self.__options_btn, alignment=QtCore.Qt.AlignLeft)
-        if self.__has_feature_maps:
+        if self._has_feature_maps:
             buttons_wrapper_layout.addWidget(self.__feature_map_cb)
         self.__hide_btn.setText('Hide')
         buttons_wrapper_layout.addWidget(self.__hide_btn, alignment=QtCore.Qt.AlignRight)
@@ -1492,7 +1078,7 @@ class GraphFrame(QFrame):
 
         end = time.perf_counter()
         print(f'Graph initialization {end - start} s')
-        if self.__has_feature_maps:
+        if self._has_feature_maps:
             self.__feature_map_cb.clear()
             output_shape = neural_layer.output_shape
             for feature_map_index in range(output_shape[-1]):
@@ -1502,14 +1088,13 @@ class GraphFrame(QFrame):
                                                 self.__feature_map_cb.currentIndex())
         else:
             print('Weight initilization start')
-            time.sleep(2)
             start = time.perf_counter()
             self.__weight_controller.initialize(self, neural_layer.layer_weights, neural_layer.layer_biases)
             end = time.perf_counter()
             print(f'Weight initialization {end - start} s')
 
     def initialize_selected_feature_map(self):
-        if self.__has_feature_maps:
+        if self._has_feature_maps:
             selected_fm = self.__feature_map_cb.currentIndex()
             self.__weight_controller.initialize_for_fm(selected_fm)
             self.__neural_layer.selected_feature_map = selected_fm
