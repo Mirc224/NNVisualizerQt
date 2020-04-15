@@ -42,10 +42,9 @@ class BackEntry(QLineEdit):
 
 
 class RewritableLabel(QWidget):
-    def __init__(self, id=None, label_text='Toto je label', variable_text='Khoko', enter_command=None, entry_width=50,
+    def __init__(self, id=None, label_text='', variable_text='', enter_command=None, entry_width=50,
                  *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        font = QtGui.QFont()
+        super(RewritableLabel, self).__init__(*args, **kwargs)
         self.__id = id
 
         self.__name_variable = label_text + ' '
@@ -116,7 +115,7 @@ class RewritableLabel(QWidget):
 
 class RemovingCombobox(QWidget):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(RemovingCombobox, self).__init__(*args, **kwargs)
 
         layout = QVBoxLayout(self)
         self.setLayout(layout)
@@ -264,7 +263,7 @@ class FloatSlider(QSlider):
     onResize = QtCore.pyqtSignal()
 
     def __init__(self, *args, **kwargs):
-        super(QSlider, self).__init__(*args, **kwargs)
+        super(FloatSlider, self).__init__(*args, **kwargs)
         self.decimals = 5
         self._max_int = 10 ** self.decimals
         super().setMinimum(0)
@@ -308,7 +307,7 @@ class FloatSlider(QSlider):
 
 class DisplaySlider(QWidget):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(DisplaySlider, self).__init__(*args, **kwargs)
         self.__id = None
         self.__wrapper_gb = QGroupBox()
         self._slider = FloatSlider(QtCore.Qt.Horizontal)
@@ -435,7 +434,7 @@ class DisplaySlider(QWidget):
 
 class VariableDisplaySlider(DisplaySlider):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(VariableDisplaySlider, self).__init__(*args, **kwargs)
         self.__variable_list = None
         self.__index = None
 
@@ -461,7 +460,7 @@ class VariableDisplaySlider(DisplaySlider):
 class CustomMessageBox(QMessageBox):
     def __init__(self, window_title='', text='', yes_button='Yes', no_buton='No', cancel='Cancel', informative_text='',
                  *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(CustomMessageBox, self).__init__(*args, **kwargs)
         self.setWindowTitle(window_title)
         self.setText(text)
         self.addButton(yes_button, QMessageBox.YesRole)

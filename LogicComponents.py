@@ -6,6 +6,7 @@ from os.path import isfile, join, isdir
 import cv2
 import matplotlib.colors as mcolors
 import pandas as pd
+import pandas.errors
 from sklearn import preprocessing
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
@@ -245,10 +246,27 @@ class GraphLogicLayer:
         :return:
         """
         # Pre aktívne vrstvy, ktoré sú väčšie ako začiatočná vrstva sa aplikujú vykonané zmeny.
+        threads = []
+        start = time.perf_counter()
+        # for layer_number in self.__active_layers:
+        #     if layer_number >= start_layer:
+        #         self.__neural_layers[layer_number].apply_displayed_data_changes()
+        #         self.__neural_layers[layer_number].redraw_graph_if_active()
+
         for layer_number in self.__active_layers:
             if layer_number >= start_layer:
-                self.__neural_layers[layer_number].apply_changes()
+                thread = threading.Thread(target=self.__neural_layers[layer_number].apply_displayed_data_changes)
+                threads.append(thread)
+                thread.start()
+                # self.__neural_layers[layer_number].apply_displayed_data_changes()
+                # self.__neural_layers[layer_number].redraw_graph_if_active()
+        for thread in threads:
+            thread.join()
+        for layer_number in self.__active_layers:
+            if layer_number >= start_layer:
                 self.__neural_layers[layer_number].redraw_graph_if_active()
+        end = time.perf_counter()
+        print(f'Broadcast time {end - start} s')
         self.__mg_frame.update_active_options_layer(start_layer)
 
     def redraw_active_graphs(self, start_layer=0):
@@ -350,9 +368,15 @@ class GraphLogicLayer:
         if self.__keras_model is not None:
             file_ext = ntpath.splitext(filepath)[1]
             if file_ext == '.txt':
-                data = pd.read_csv(filepath, sep=' ', header=None)
+                try:
+                    data = pd.read_csv(filepath, sep=' ', header=None)
+                except pd.errors.ParserError as e:
+                    return e
             else:
-                data = pd.read_csv(filepath, header=None)
+                try:
+                    data = pd.read_csv(filepath, header=None)
+                except pd.errors.ParserError as e:
+                    return e
 
             # Načítanie configu do premenných.
             shape_of_input = self.__keras_model.layers[0].input_shape[1]
@@ -685,7 +709,7 @@ class NeuralLayer:
 
         self.set_default_cords()
 
-    def apply_changes(self):
+    def apply_displayed_data_changes(self):
         '''
         Popis
         --------
@@ -743,66 +767,39 @@ class NeuralLayer:
                     self.__graph_frame.plotting_frame.points_cords = self.__points_method_cords[self.__used_cords]
 
     def apply_no_method(self):
-        if self.__has_feature_maps:
-            self.__points_method_cords = self.__point_cords.copy()
-        else:
-            self.__points_method_cords = self.__point_cords.copy()
+        self.__points_method_cords = self.__point_cords.copy()
 
     def apply_PCA(self):
         np.seterr(divide='ignore', invalid='ignore')
         if self.__has_feature_maps:
             feature_map_points = self.__point_cords[self.__selected_feature_map, :, :, :].transpose()
-            flattened = np.array([xi.flatten() for xi in feature_map_points])
-            scaled_data = preprocessing.StandardScaler().fit_transform(flattened)
-            pca = PCA()
-            pca.fit(scaled_data)
-            pca_data = pca.transform(scaled_data)
-            pcs_components_transpose = pca_data.transpose()
-            self.__points_method_cords = pcs_components_transpose
-            number_of_pcs_indexes = min(self.__output_dimension, pca.explained_variance_ratio_.size)
-            if number_of_pcs_indexes > 0:
-                self.__layer_config['PCA_config']['percentage_variance'] = pd.Series(
-                    np.round(pca.explained_variance_ratio_ * 100, decimals=1),
-                    index=self.__pc_labels[:number_of_pcs_indexes])
-                self.__layer_config['PCA_config']['largest_influence'] = pd.DataFrame(pca.components_.transpose(),
-                                                                                   index=self.__activation_nodes_labels)
-                # self._layer_config['PCA_config']['largest_influence'] = pd.Series(pca.components_[0],
-                #                                                                    index=self.__activation_nodes_labels)
-
+            points_cords = np.array([xi.flatten() for xi in feature_map_points])
         else:
-            points_cords = self.__point_cords.transpose()
-            scaled_data = preprocessing.StandardScaler().fit_transform(points_cords)
-            pca = PCA()
-            pca.fit(scaled_data)
-            pca_data = pca.transform(scaled_data)
-            pcs_components_transpose = pca_data.transpose()
-            self.__points_method_cords = pcs_components_transpose
-            number_of_pcs_indexes = min(self.__output_dimension, pca.explained_variance_ratio_.size)
-            if number_of_pcs_indexes > 0:
-                self.__layer_config['PCA_config']['percentage_variance'] = pd.Series(
-                    np.round(pca.explained_variance_ratio_ * 100, decimals=1),
-                    index=self.__pc_labels[:number_of_pcs_indexes])
-                self.__layer_config['PCA_config']['largest_influence'] = pd.Series(pca.components_[0],
-                                                                                   index=self.__activation_nodes_labels)
+            points_cords = self.__point_cords.transpose().copy()
+        scaled_data = preprocessing.StandardScaler().fit_transform(points_cords)
+        pca = PCA()
+        pca.fit(scaled_data)
+        pca_data = pca.transform(scaled_data)
+        pcs_components_transpose = pca_data.transpose()
+        self.__points_method_cords = pcs_components_transpose
+        number_of_pcs_indexes = min(self.__output_dimension, pca.explained_variance_ratio_.size)
+        if number_of_pcs_indexes > 0:
+            self.__layer_config['PCA_config']['percentage_variance'] = pd.Series(
+                np.round(pca.explained_variance_ratio_ * 100, decimals=1),
+                index=self.__pc_labels[:number_of_pcs_indexes])
+            self.__layer_config['PCA_config']['largest_influence'] = pd.DataFrame(pca.components_.transpose(),
+                                                                                  index=self.__activation_nodes_labels)
 
     def apply_t_SNE(self):
+        t_sne_config = self.__layer_config['t_SNE_config']
         if self.__has_feature_maps:
             feature_map_points = self.__point_cords[self.__selected_feature_map, :, :, :].transpose()
-            flattened = np.array([xi.flatten() for xi in feature_map_points])
-            t_sne_config = self.__layer_config['t_SNE_config']
-            # self.__used_cords = t_sne_config['displayed_cords']
-            number_of_components = t_sne_config['used_config']['n_components']
-            tsne = TSNE(**t_sne_config['used_config'])
-            transformed_cords = tsne.fit_transform(flattened).transpose()
-            self.__points_method_cords = transformed_cords
+            points_cords = np.array([xi.flatten() for xi in feature_map_points])
         else:
-            t_sne_config = self.__layer_config['t_SNE_config']
-            # self.__used_cords = t_sne_config['displayed_cords']
-            points_cords = self.__point_cords.transpose()
-            number_of_components = t_sne_config['used_config']['n_components']
-            tsne = TSNE(**t_sne_config['used_config'])
-            transformed_cords = tsne.fit_transform(points_cords).transpose()
-            self.__points_method_cords = transformed_cords
+            points_cords = self.__point_cords.transpose().copy()
+        tsne = TSNE(**t_sne_config['used_config'])
+        transformed_cords = tsne.fit_transform(points_cords).transpose()
+        self.__points_method_cords = transformed_cords
 
     def clear(self):
         '''
@@ -819,7 +816,7 @@ class NeuralLayer:
 
     def set_polygon_cords(self):
         self.__logic_layer.set_polygon_cords(self.__layer_number)
-        self.apply_changes()
+        self.apply_displayed_data_changes()
 
     def require_graphs_redraw(self):
         self.__logic_layer.redraw_active_graphs(-1)
@@ -831,7 +828,7 @@ class NeuralLayer:
     def use_config(self):
         if self.__visible:
             if self.__layer_config['apply_changes']:
-                self.apply_changes()
+                self.apply_displayed_data_changes()
                 self.__layer_config['cords_changed'] = False
                 self.__layer_config['apply_changes'] = False
             elif self.__layer_config['cords_changed']:
@@ -878,7 +875,7 @@ class NeuralLayer:
         t_sne_config['displayed_cords'] = list(range(t_sne_config['used_config']['n_components']))
 
     def signal_feature_map_change(self):
-        self.apply_changes()
+        self.apply_displayed_data_changes()
         self.redraw_graph_if_active()
         self.__logic_layer.require_options_bar_update(self)
 
@@ -983,11 +980,11 @@ class NeuralLayer:
 
     @graph_frame.setter
     def graph_frame(self, value):
-        self.__graph_frame = value
-        if self.__graph_frame is not None:
+        if value is not None:
             self.__visible = True
         else:
             self.__visible = False
+        self.__graph_frame = value
 
     @property
     def number_of_outputs(self):
@@ -1027,7 +1024,7 @@ class GraphFrame(QFrame):
         :param neural_layer: odkaz na NeuralLayer, pod ktroú patrí daný GraphFrame
         :param parent: nadradený tkinter Widget
         '''
-        super().__init__(*args, **kwargs)
+        super(GraphFrame, self).__init__(*args, **kwargs)
         self.__neural_layer = None
         self._has_feature_maps = has_feature_maps
         self.__options_btn = QPushButton()
@@ -1133,7 +1130,6 @@ class GraphFrame(QFrame):
             self.__graph.graph_labels = config['axis_labels']
             self.__graph.is_3d_graph = config['draw_3d']
             self.__graph.set_color_label(config['color_labels'])
-            self.redraw_graph()
 
     def __del__(self):
         print('mazanie graph frame')

@@ -1,8 +1,9 @@
 import gc
-import matplotlib
 import math
+
+import matplotlib
+
 matplotlib.use('Qt5Agg')
-from PyQt5 import QtCore
 from QtGraphicalComponents import *
 import numpy as np
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
@@ -10,7 +11,7 @@ from matplotlib import backend_bases
 from matplotlib.figure import Figure
 import mpl_toolkits.mplot3d as plt3d
 from mpl_toolkits.mplot3d import proj3d
-
+import threading
 
 class PlotingFrame(QWidget):
     def __init__(self, *args, **kwargs):
@@ -85,6 +86,8 @@ class PlotingFrame(QWidget):
         self.__changed = False
         self.__change_in_progress = False
         self.__locked_view = False
+
+        self.__conditon_var = threading.Condition()
         # self.__ani = animation.FuncAnimation(self.__figure, self.update_changed, interval=105)
 
     def initialize(self, controller, number_of_outputs, displayed_cords, points_config: dict,
@@ -125,77 +128,79 @@ class PlotingFrame(QWidget):
                         child.setVisible(True)
 
         self.__changed = True
-        self.update_graph()
 
     def redraw_graph(self):
-        print('redraw')
-        if self.__locked_view:
-            tmpX = self.__axis.get_xlim()
-            tmpY = self.__axis.get_ylim()
-            if self.__number_of_dim == 3:
-                tmpZ = self.__axis.get_zlim()
-        self.__axis.clear()
-        self.__axis.grid()
-
-        self.__axis.set_title(self.__graph_title)
-        self.__axis.set_xlabel(self.__graph_labels[0])
-        if self.__number_of_outputs > 1:
-            self.__axis.set_ylabel(self.__graph_labels[1])
-            if self.__draw_3D:
-                self.__axis.set_zlabel(self.__graph_labels[2])
-
-        if self.__cords is not None:
-            number_of_cords = len(self.__cords)
-            if self.__draw_polygon:
+        self.__conditon_var.acquire()
+        if self.__canvas is not None:
+            if self.__locked_view:
+                tmpX = self.__axis.get_xlim()
+                tmpY = self.__axis.get_ylim()
                 if self.__number_of_dim == 3:
-                    for edge in self.__line_cords_tuples:
-                        xs = edge[0][0], edge[1][0]
-                        ys = edge[0][1], edge[1][1]
-                        zs = edge[0][2], edge[1][2]
-                        line = plt3d.art3d.Line3D(xs, ys, zs, color='black', linewidth=1, alpha=0.3)
-                        self.__axis.add_line(line)
-                if self.__number_of_dim == 2:
-                    for edge in self.__line_cords_tuples:
-                        xs = edge[0][0], edge[1][0]
-                        if number_of_cords == 1:
-                            ys = 0, 0
-                        else:
-                            ys = edge[0][1], edge[1][1]
+                    tmpZ = self.__axis.get_zlim()
+            self.__axis.clear()
+            self.__axis.grid()
 
-                        self.__axis.plot(xs, ys, linestyle='-', color='black', linewidth=1, alpha=0.5)
-
-            x_axe_cords = self.__cords[0]
-            y_axe_cords = np.zeros_like(self.__cords[0])
-            z_axe_cords = np.zeros_like(self.__cords[0])
-            self.set_point_color()
-
-            if len(self.__cords[0]) == len(self.__points_color):
-                if number_of_cords >= 2:
-                    y_axe_cords = self.__cords[1]
-                    if number_of_cords > 2:
-                        z_axe_cords = self.__cords[2]
-
+            self.__axis.set_title(self.__graph_title)
+            self.__axis.set_xlabel(self.__graph_labels[0])
+            if self.__number_of_outputs > 1:
+                self.__axis.set_ylabel(self.__graph_labels[1])
                 if self.__draw_3D:
-                    self.__axis.scatter(x_axe_cords, y_axe_cords, z_axe_cords, c=self.__points_color)
-                    for point in self.__points_config['active_labels']:
-                        self.__axis.text(x_axe_cords[point],
-                                         y_axe_cords[point],
-                                         z_axe_cords[point],
-                                         self.__points_config['label'][point])
-                else:
-                    self.__axis.scatter(x_axe_cords, y_axe_cords, c=self.__points_color)
-                    for point in self.__points_config['active_labels']:
-                        if point < len(self.__points_config['label']):
-                            self.__axis.annotate(self.__points_config['label'][point],
-                                                (x_axe_cords[point], y_axe_cords[point]))
+                    self.__axis.set_zlabel(self.__graph_labels[2])
 
-        if self.__locked_view:
-            print('locked view')
-            self.__axis.set_xlim(tmpX)
-            self.__axis.set_ylim(tmpY)
-            if self.__number_of_dim == 3:
-                self.__axis.set_zlim(tmpZ)
-        self.__canvas.draw()
+            if self.__cords is not None:
+                number_of_cords = len(self.__cords)
+                if self.__draw_polygon:
+                    if self.__number_of_dim == 3:
+                        for edge in self.__line_cords_tuples:
+                            xs = edge[0][0], edge[1][0]
+                            ys = edge[0][1], edge[1][1]
+                            zs = edge[0][2], edge[1][2]
+                            line = plt3d.art3d.Line3D(xs, ys, zs, color='black', linewidth=1, alpha=0.3)
+                            self.__axis.add_line(line)
+                    if self.__number_of_dim == 2:
+                        for edge in self.__line_cords_tuples:
+                            xs = edge[0][0], edge[1][0]
+                            if number_of_cords == 1:
+                                ys = 0, 0
+                            else:
+                                ys = edge[0][1], edge[1][1]
+
+                            self.__axis.plot(xs, ys, linestyle='-', color='black', linewidth=1, alpha=0.5)
+
+                x_axe_cords = self.__cords[0]
+                y_axe_cords = np.zeros_like(self.__cords[0])
+                z_axe_cords = np.zeros_like(self.__cords[0])
+                self.set_point_color()
+
+                if len(self.__cords[0]) == len(self.__points_color):
+                    if number_of_cords >= 2:
+                        y_axe_cords = self.__cords[1]
+                        if number_of_cords > 2:
+                            z_axe_cords = self.__cords[2]
+
+                    if self.__draw_3D:
+                        self.__axis.scatter(x_axe_cords, y_axe_cords, z_axe_cords, c=self.__points_color)
+                        for point in self.__points_config['active_labels']:
+                            self.__axis.text(x_axe_cords[point],
+                                             y_axe_cords[point],
+                                             z_axe_cords[point],
+                                             self.__points_config['label'][point])
+                    else:
+                        self.__axis.scatter(x_axe_cords, y_axe_cords, c=self.__points_color)
+                        for point in self.__points_config['active_labels']:
+                            if point < len(self.__points_config['label']):
+                                self.__axis.annotate(self.__points_config['label'][point],
+                                                     (x_axe_cords[point], y_axe_cords[point]))
+
+            if self.__locked_view:
+                print('locked view')
+                self.__axis.set_xlim(tmpX)
+                self.__axis.set_ylim(tmpY)
+                if self.__number_of_dim == 3:
+                    self.__axis.set_zlim(tmpZ)
+            self.__canvas.draw()
+        self.__conditon_var.notify()
+        self.__conditon_var.release()
 
     def update_graph(self):
         if self.__initialized:
@@ -222,6 +227,7 @@ class PlotingFrame(QWidget):
             self.__points_color[point] = color
 
     def clear(self):
+        self.__conditon_var.acquire()
         self.__figure.clear()
         self.__figure.clf()
         self.__axis.cla()
@@ -230,10 +236,12 @@ class PlotingFrame(QWidget):
         self.__toolbar.close()
         self.__toolbar.deleteLater()
         self.deleteLater()
+        self.__canvas = None
         self.__toolbar = None
         self.__figure = None
-        self.__canvas = None
         self.__axis = None
+        self.__conditon_var.notify()
+        self.__conditon_var.release()
         gc.collect()
 
     def on_mouse_double_click(self, event):
@@ -324,7 +332,6 @@ class PlotingFrame(QWidget):
     @is_3d_graph.setter
     def is_3d_graph(self, value):
         if self.__draw_3D != value:
-            print('nastavenei na false')
             self.__draw_3D = value
             if self.__draw_3D:
                 self.set_graph_dimension(3)
@@ -463,6 +470,9 @@ class LayerWeightControllerFrame(QWidget):
         self._active_slider_dict = {}
         self._add_slider_rc.clear()
         self._add_slider_rc = None
+
+    def __del__(self):
+        print('Mazanie controller')
 
 
 class NoFMWeightControllerFrame(LayerWeightControllerFrame):
