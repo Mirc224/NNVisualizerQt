@@ -13,19 +13,29 @@ import mpl_toolkits.mplot3d as plt3d
 from mpl_toolkits.mplot3d import proj3d
 import threading
 
+
+backend_bases.NavigationToolbar2.toolitems = (
+    ('Home', 'Reset original view', 'home', 'home'),
+    ('Back', 'Back to  previous view', 'back', 'back'),
+    ('Forward', 'Forward to next view', 'forward', 'forward'),
+    ('Pan', 'Pan axes with left mouse, zoom with right', 'move', 'pan'),
+    ('Zoom', 'Zoom to rectangle', 'zoom_to_rect', 'zoom'),
+)
+
+
 class PlotingFrame(QWidget):
     def __init__(self, *args, **kwargs):
-        '''
+        """
         Popis
-        --------
-        Obsahuje v sebe graf z knižnice matplotlib. Zobrazuje ako vyzerjú transformované body v danej vrstve. Zobrazuje
-        aj mriežku.
+        ----------------------------------------------------------------------------------------------------------------
+        Trieda obsahujúca graf. Slúži na vykresľovanie zadaných bodov.
 
         Atribúty
-        --------
-        :var self.__cords = obsahuje odkaz na súradnice bofob, ktoré budú zobrazované
+        ----------------------------------------------------------------------------------------------------------------
+        :var self.__cords:         súradnice bodov, ktoré majú byť zobrazené.
+        :var self.__line_cords_t:  obsahuje transformované súradnice hrán mriežky, ak je možné ju zobraziť.
         :var self.__number_of_dim: udáva počet vykresľovaných dimenzií
-        :var self.__graph_title: názov, ktorý sa bude zobrazovať vo vykresľovanom grafe
+        :var self.__graph_title:   názov, ktorý sa bude zobrazovať vo vykresľovanom grafe
         :var self.__graph_labels: názvy jednotlivých osí
         :var self.__main_graph_frame: odkaz na graph frame, bude použitý na zobrazovanie informácií o rozkliknutom bode
         :var self.__figure: matplotlib figúra
@@ -37,16 +47,14 @@ class PlotingFrame(QWidget):
         :var self.__changed: pre efektívnejší update
         :var self.__ani: animácia pre prekresľovanie grafu pri zmenách. Najjedoduchší spôsob pre interaktívne a
                          dynamické grafy
-        '''
-        super().__init__(*args, **kwargs)
+        """
+        super(PlotingFrame, self).__init__(*args, **kwargs)
+
+        # self.__initialized = False
         self.__cords = np.array([[], [], []])
-        self.__initialized = False
-        self.__line_cords_tuples = None
+        self.__line_cords_t = None
 
         self.__number_of_outputs = None
-
-        self.__draw_polygon = False
-        self.__use_colored_labels = False
 
         self.__number_of_dim = -1
         self.__graph_title = 'Graf'
@@ -57,49 +65,36 @@ class PlotingFrame(QWidget):
         self.__points_color = None
         self.__used_color = None
 
-        # self.__graph_container = tk.LabelFrame(self.__plot_wrapper_frame.Frame, relief=tk.FLAT)
-        # self.__graph_container.pack(fill='both', expand=True)
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.setLayout(layout)
         self.__figure = Figure(figsize=(4, 4), dpi=100)
         self.__canvas = FigureCanvasQTAgg(self.__figure)
-        # self.__canvas.setStyleSheet("background-color:transparent;")
-        layout.addWidget(self.__canvas)
-        self.__canvas.mpl_connect('button_press_event', self.on_mouse_double_click)
         self.__axis = self.__figure.add_subplot(111, projection='3d')
-        self.__draw_3D = False
-
-        backend_bases.NavigationToolbar2.toolitems = (
-            ('Home', 'Reset original view', 'home', 'home'),
-            ('Back', 'Back to  previous view', 'back', 'back'),
-            ('Forward', 'Forward to next view', 'forward', 'forward'),
-            ('Pan', 'Pan axes with left mouse, zoom with right', 'move', 'pan'),
-            ('Zoom', 'Zoom to rectangle', 'zoom_to_rect', 'zoom'),
-        )
 
         self.__toolbar = NavigationToolbar(self.__canvas, self)
-        self.__toolbar.setMinimumHeight(35)
 
-        layout.addWidget(self.__toolbar)
-
-        self.__changed = False
-        self.__change_in_progress = False
+        self.__use_colored_labels = False
+        self.__draw_polygon = False
         self.__locked_view = False
+        self.__draw_3D = False
 
-        self.__conditon_var = threading.Condition()
-        # self.__ani = animation.FuncAnimation(self.__figure, self.update_changed, interval=105)
+        self.initialize_ui()
+        self.__condition_var = threading.Condition()
+
+    def initialize_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.__canvas)
+        self.__canvas.mpl_connect('button_press_event', self.on_mouse_double_click)
+        self.__toolbar.setMinimumHeight(35)
+        layout.addWidget(self.__toolbar)
 
     def initialize(self, controller, number_of_outputs, displayed_cords, points_config: dict,
                    layer_name: str):
         self.__cords = displayed_cords
         self.__parent_controller = controller
         self.__number_of_outputs = number_of_outputs
-        self.__change_in_progress = False
         self.__graph_title = layer_name
         self.__points_config = points_config
         self.__points_color = []
-        self.__initialized = True
         self.set_graph_dimension(self.__number_of_outputs)
 
     def set_graph_dimension(self, dimension: int):
@@ -127,10 +122,8 @@ class PlotingFrame(QWidget):
                     if not isinstance(child, QLabel) and not isinstance(child, QWidgetAction):
                         child.setVisible(True)
 
-        self.__changed = True
-
     def redraw_graph(self):
-        self.__conditon_var.acquire()
+        self.__condition_var.acquire()
         if self.__canvas is not None:
             if self.__locked_view:
                 tmpX = self.__axis.get_xlim()
@@ -151,14 +144,14 @@ class PlotingFrame(QWidget):
                 number_of_cords = len(self.__cords)
                 if self.__draw_polygon:
                     if self.__number_of_dim == 3:
-                        for edge in self.__line_cords_tuples:
+                        for edge in self.__line_cords_t:
                             xs = edge[0][0], edge[1][0]
                             ys = edge[0][1], edge[1][1]
                             zs = edge[0][2], edge[1][2]
                             line = plt3d.art3d.Line3D(xs, ys, zs, color='black', linewidth=1, alpha=0.3)
                             self.__axis.add_line(line)
                     if self.__number_of_dim == 2:
-                        for edge in self.__line_cords_tuples:
+                        for edge in self.__line_cords_t:
                             xs = edge[0][0], edge[1][0]
                             if number_of_cords == 1:
                                 ys = 0, 0
@@ -193,18 +186,17 @@ class PlotingFrame(QWidget):
                                                      (x_axe_cords[point], y_axe_cords[point]))
 
             if self.__locked_view:
-                print('locked view')
                 self.__axis.set_xlim(tmpX)
                 self.__axis.set_ylim(tmpY)
                 if self.__number_of_dim == 3:
                     self.__axis.set_zlim(tmpZ)
             self.__canvas.draw()
-        self.__conditon_var.notify()
-        self.__conditon_var.release()
+        self.__condition_var.notify()
+        self.__condition_var.release()
 
-    def update_graph(self):
-        if self.__initialized:
-            self.redraw_graph()
+    # def update_graph(self):
+    #     # if self.__initialized:
+    #     self.redraw_graph()
 
     def set_color_label(self, new_value):
         if new_value:
@@ -227,7 +219,7 @@ class PlotingFrame(QWidget):
             self.__points_color[point] = color
 
     def clear(self):
-        self.__conditon_var.acquire()
+        self.__condition_var.acquire()
         self.__figure.clear()
         self.__figure.clf()
         self.__axis.cla()
@@ -240,8 +232,8 @@ class PlotingFrame(QWidget):
         self.__toolbar = None
         self.__figure = None
         self.__axis = None
-        self.__conditon_var.notify()
-        self.__conditon_var.release()
+        self.__condition_var.notify()
+        self.__condition_var.release()
         gc.collect()
 
     def on_mouse_double_click(self, event):
@@ -348,11 +340,11 @@ class PlotingFrame(QWidget):
 
     @property
     def line_tuples(self):
-        return self.__line_cords_tuples
+        return self.__line_cords_t
 
     @line_tuples.setter
     def line_tuples(self, new_tuples):
-        self.__line_cords_tuples = new_tuples
+        self.__line_cords_t = new_tuples
 
     @property
     def point_color(self):
@@ -363,13 +355,13 @@ class PlotingFrame(QWidget):
         self.__points_color = new_value
 
 ######################### GETTERS and SETTERS ####################
-    @property
-    def is_initialized(self):
-        return self.__initialized
-
-    @is_initialized.setter
-    def is_initialized(self, value):
-        self.__initialized = value
+    # @property
+    # def is_initialized(self):
+    #     return self.__initialized
+    #
+    # @is_initialized.setter
+    # def is_initialized(self, value):
+    #     self.__initialized = value
 
 
 class LayerWeightControllerFrame(QWidget):
