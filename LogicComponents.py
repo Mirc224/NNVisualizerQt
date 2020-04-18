@@ -1,18 +1,16 @@
-import ntpath
-from os import listdir
-from os.path import isfile, join, isdir
-
 import cv2
-import matplotlib.colors as mcolors
+import ntpath
 import pandas as pd
 import pandas.errors
-from sklearn import preprocessing
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
+import matplotlib.colors as mcolors
+from os import listdir
 from tensorflow import keras
-
+from sklearn.manifold import TSNE
+from sklearn import preprocessing
 from AdditionalComponents import *
+from sklearn.decomposition import PCA
 from PlotAndControlComponents import *
+from os.path import isfile, join, isdir
 
 BASIC_POINT_COLOR = '#04B2D9'
 
@@ -150,7 +148,6 @@ class GraphLogicLayer:
                                nie o rekurentné neurónove siete, môže zmena váh na vstupe určitej vrstvy ovplyvniť
                                len konkrétnu vrstvu a vrstvy nasledujúce za ňou.
         """
-        start = time.perf_counter()
         # Na základe poradového čísla je zo zoznamu aktívnych vrstiev vytvorený zoznam poradových čísel (súčasne aj
         # indexov) vrstiev, ktoré majú byť prepočítané a prekreslené. Prepočítané a prekreslené majú byť vrstvy,
         # ktoré sa nachádzajú v poradi za vrstvou, na ktorej došlo k zmene, teda ich poradové číslo je rovné
@@ -166,8 +163,6 @@ class GraphLogicLayer:
         layers_for_update = [layer_number for layer_number in layers_for_update
                              if layer_number >= starting_layer and self.__neural_layers[layer_number].calculate_polygon]
         self.recalculate_grid(layers_for_update)
-        end = time.perf_counter()
-        print(f'Predict Calculation time {end - start} s')
 
     def recalculate_cords(self, layers_for_update):
         """
@@ -409,7 +404,7 @@ class GraphLogicLayer:
                             tohto parametra, budú prekreslené.
         """
         for layer_number in self.__active_layers:
-            if layer_number > start_layer:
+            if layer_number >= start_layer:
                 self.__neural_layers[layer_number].redraw_graph_if_active()
 
     def set_layer_weights_and_biases(self, layer_number, layer_weights, layer_biases):
@@ -891,6 +886,7 @@ class NeuralLayer:
                                     zmenený za účelom dosiahnutia unikátneho mena, ktoré sa stane identifikátorom
                                     vrstvy.
         :var self.__has_f_maps:     poskytuje informáciu o tom, či sa na danej vrstve vyskytujú feature mapy.
+        :var self.__selected_fm:    číslo zvolenej feature mapy, pre ktorú sa má zobrazovať výstup.
         :var self.__output_shape:   výstupný tvar vrstvy.
         :var self.__output_dim:     tento atribút nesie informáciu o výstupnej dimenzií vrstvy.
         :var self.__num_of_out:     predstavuje počet výstupov z vrstvy. Môže zodpovedať počtu výstupných feature map
@@ -914,7 +910,9 @@ class NeuralLayer:
         :var self.__activ_nodes_l:  názvy výstupov, používaných pri výpise informácií ohľadom použitej PCA, konkrétne
                                     informácie o vplyve výstupu na jednotlivé hlavné komponenty.
         :var self.__pc_labels:      obsahuje preddefinované nazvy pre hlavné komponenty.
-        :var self.__method_cords:   obsahuje súradnice bodov po použití metódy na redukciu priestoru.
+        :var self.__method_cords:   obsahuje súradnice bodov po použití metódy na redukciu priestoru. Pri zmene zobraze-
+                                    ných súradníc vďaka tomu nie je potrebné prepočítať na výstupy pre metódu a dané
+                                    súradnice ale z tejto premennej sú vytiahnuté len požadované súradnice.
         :var self.__visible:        nesie informáciu o tom, či je pre danú vrstvu vykresľovaný zobrazený rámec s grafom
                                     a ovládačom váh.
 
@@ -924,113 +922,184 @@ class NeuralLayer:
         :param keras_layer   odkaz na prislúchajúcu vrstvu z keras modelu.
         :param layer_number: poradové číslo vrstvy.
         """
+        # Na základe prijatého parametra obsahujúceho odkaz na vrstvu modelu keras je nastavné príslušné meno vrstvy. 
+        # Taktiež sú predefinované niektoré hodnoty atribútov.
         self.__layer_name = keras_layer.get_config()['name']
-
-        self.__has_f_maps = False
-        self.__selected_feature_map = 0
-        self.__output_shape = keras_layer.output_shape
-        self.__output_dim = None
-        if len(self.__output_shape) > 2:
-            self.__has_f_maps = True
-            self.__output_dim = self.__output_shape[-3] * self.__output_shape[-2]
-        else:
-            self.__output_dim = self.__output_shape[-1]
-        self.__num_of_out = self.__output_shape[-1]
-        self.__layer_number = layer_number
-        if len(keras_layer.get_weights()) != 0:
-            self.__layer_weights = keras_layer.get_weights()[0]
-            self.__layer_biases = keras_layer.get_weights()[1]
-        else:
-            self.__layer_weights = None
-            self.__layer_biases = None
-
-        self.__has_points = False
-
-        self.__calc_polygon = False
-
-        self.__poly_cords_t = None
-
-        self.__layer_config = {}
-
-        self.__points_config = None
-
-        self.__graph_frame = None
-
         self.__logic_layer = logic_layer
         self.__layer_number = layer_number
+        self.__has_f_maps = False
+        self.__selected_fm = 0
+        self.__output_shape = keras_layer.output_shape
+        self.__output_dim = None
+        self.__layer_config = {}
+        self.__has_points = False
+        self.__calc_polygon = False
+        self.__poly_cords_t = None
+        self.__points_config = None
+        self.__graph_frame = None
         self.__point_cords = np.array([])
         self.__used_cords = []
         self.__activ_nodes_l = []
         self.__pc_labels = []
-
         self.__method_cords = []
-
         self.__visible = False
 
-    def initialize(self, points_config):
-        '''
-        Parametre
-        --------
-        :param layer_number: poradové číslo vrstvy
-        :param layer_point_cords: refrencia na zoznam súradníc bodov pre danú vrstvu
-        :param layer_weights: referencia na hodnoty váh v danej vrstve. Hodnoty sú menené v controllery a používajú sa
-                              pri prepočítavaní súradnic v GraphLogicLayer.
-        :param layer_bias: referencia na hodnoty bias v danej vrstve. Podobne ako pr layer_weights
-        :param layer_name: názov vrstvy, je unikátny pre každú vrstvu, spolu s poradovým číslom sa používa ako ID.
-        '''
-        # Počet dimenzií, resp. počet súradníc zistíme podľa počtu vnorených listov.
+        # Podľa toho, či výstupný tvar obsahuje viac ako dva rozmery, či su na výstupe vrstvy prítomné feature mapy.
+        # Výstupný formát má tvar (veľkosť vstupnej dávky (väčšinou hodnota None), (tu sa možu nachádzať dva rozme-
+        # ry v prípade ak ide o vstup viacrozmerných dát, napríklad obrázkov, ak ide o obrázky je na prvom mieste
+        # výška obrazku a na druhom mieste šírka obrázku), posledné číslo udáva počet výstupov prípadne počet
+        # feature máp)
+        if len(self.__output_shape) > 2:
 
+            # Ak  výstupný rozmer obsahuje viac ako 2 položky (batch size a počet výstupov), je zrejmé, že sa jedná
+            # o vrstvu, ktorá má na svojom výstupe feature mapy. Preto je nastavená hodnota atribútu has_f_maps na
+            # hodnotu True. Taktiež je vypočítaná výstupná dimenzia, ktorú získame vynásobením výšky a šírky.
+            self.__has_f_maps = True
+            self.__output_dim = self.__output_shape[-3] * self.__output_shape[-2]
+        else:
+
+            # Ak je počet prvkov vo výstupnom rozmere je menej ako dva ide o vrstvu, na výstupe ktorej sa nenachádzajú
+            # feature mapy, preto sa ponecháva prednastavená hodnota atribútu has_f_maps na hodnote False. Podľa
+            # počtu výstupov je nastavená výstupná dimenzia.
+            self.__output_dim = self.__output_shape[-1]
+
+        # Počet výstupov (čiže neurónov na ďalšej vrstve) alebo počet vytvorených feature máp na výstupe je získany
+        # na základe rozmeru výstupu vrstvy.
+        self.__num_of_out = self.__output_shape[-1]
+
+        # Následne sa zisťuje, či sú na vrstve prítomné nastaviteľné vrstvy a to pomocou zistenia dĺžky listu, vráteného
+        # z metódy keras vrstvy. Tento list bude väčší ako 0 ak sú na vrstve meniteľné váhy.
+        if len(keras_layer.get_weights()) != 0:
+
+            # Do atribútov sú priradené kópie váh a biasov príslušnej vrstvy z keras modelu.
+            self.__layer_weights = keras_layer.get_weights()[0].copy()
+            self.__layer_biases = keras_layer.get_weights()[1].copy()
+        else:
+
+            # Ak vrstva neobsahuje žiadne meniteľné váhy alebo biasy, je atribúttom priradená hodnota None.
+            self.__layer_weights = None
+            self.__layer_biases = None
+
+    def initialize(self, points_config):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda inicializuje atribúty triedy.
+
+        Parametre
+        ----------------------------------------------------------------------------------------------------------------
+        :param points_config: odkaz na konfiguračnú premennú obsahujúcu informácie a nastavenia ohľadom zobrazovaných
+                              bodov
+        """
+        # Je vyčistený konfiguračný atribút vrstvy obsahujúci nastavenia. Ak boli v minulosti načítané nejaké body, je
+        # im atribútu, ktorý na ne ukazuje priradená hodnota None. Na zákalde poskytnutého parametra, je priradený
+        # do atribútu points_config odkaz na konfiguračnú premennú zobrazovaných bodov.
         self.__layer_config = {}
         self.__point_cords = None
         self.__points_config = points_config
 
-        # Počet súradníc ktoré sa majú zobraziť určíme ako menšie z dvojice čísel 3 a počet dimenzií, pretože max počet,
-        # ktorý bude možno zobraziť je max 3
+        # Sú definované základné označenia osí. Do atribútu pc_labels, ktorý bude obsahovať mená možných hlavných
+        # komponentov je priradený prázdny zoznam. Podobne aj do atribútu method_cords, ktorý by bude obsahovať
+        # výstupné hodnoty bodov na základe použitej metódy je priradený čistý zoznam. Je definovaná pomocná
+        # premenná axis_labels, ktorá bude obsahovať označenia osí podľa v závislosti od počtu zobraziteľ-
+        # ných výstupov.
         axis_default_names = ['Label X', 'Label Y', 'Label Z']
+        axis_labels = []
         self.__pc_labels = []
         self.__method_cords = []
-        axis_labels = []
 
-        if not self.__has_f_maps:
-            for i in range(self.__num_of_out):
-                self.__activ_nodes_l.append(f'Neuron{i}')
-                self.__pc_labels.append(f'PC{i + 1}')
-        else:
+        # Na základe toho, či vrstva na svojom výstupe obsahuje feture mapy sú zoznamy pre označenie hlaných komponentov
+        # a prvkov vplývajúcich na jednotlivé hlavné komponenty naplnené názvami.
+        if self.__has_f_maps:
+
+            # Ak vrstva obsahuje na svojom výstupe feature mapy je na základe výstupného tvaru do pomocných premenných
+            # priradený počet riadkov a počet stĺpcov jednotlivých feature map.
             number_of_rows = self.__output_shape[1]
             number_of_cols = self.__output_shape[2]
+
+            # Podľa počtu riadkov a stĺpcov, je vytvorený cyklus priraďujúci označenia.
             for height_i in range(number_of_rows):
                 for width_i in range(number_of_cols):
-                    self.__activ_nodes_l.append(f'FM point {height_i}-{width_i}')
+                    # Body feature map vplývajúce na hlavné komponenty sú nazývane tak, že v ich názve figuruje číslo
+                    # riadku a číslo stĺpca, v ktorom sa hodnota nachádza. Označenia hlavných komponentov sú
+                    # mapované na zákalde riadku a stĺpca. Maximálny možný počet komponentov je rovanký ako
+                    # je počet hodnôt v jednej feature mape.
+                    self.__activ_nodes_l.append(f'Node {height_i}-{width_i}')
                     self.__pc_labels.append(f'PC{height_i * number_of_cols + width_i + 1}')
+        else:
 
+            # Ak vrtva neobsahuje feature mapy, tak sú v rámci jedného cyklu priradené názvy pre hlavné komponenty a
+            # jednotky vplývajúce na výstup.
+            for i in range(self.__num_of_out):
+                # Jednotky sú označované po poradí.
+                self.__activ_nodes_l.append(f'Node {i}')
+                self.__pc_labels.append(f'PC{i + 1}')
+
+        # Na základe výstupnej dimenzie je potrebné zistiť, koľko súradníc je možné vykresliť. To získame pomocou
+        # funkcie, ktorá zistí minimum z čísla 3 (maximálne môžeme zobraziť 3D graf) a počtu výstupov.
         number_of_cords = min(3, self.__output_dim)
         for i in range(number_of_cords):
+            # Podľa počtu zobraziteľných súradníc sú do listu pre označenie osí pridané základné názvy z pomocného listu
+            # podľa poradového čísla.
             axis_labels.append(axis_default_names[i])
 
+        # Sú definované nastavenia a informačné hodnoty do konfiguračnej premennej. Tieto hodnoty sú používané pri voľbe
+        # zobrazovaných súradnic, voľbe metódy na redukciu priestoru a na základe týchto hodnôt sú zobrazené možnosti
+        # na panale možností, keď je zvolená možnosť nastavení pre príslušnú vrstvu.
+
+        # Hodnota pod kľúčom has_feature_maps informuje o tom, či výstup z vrstvy pozostáva z feature máp. Pod kľúčom
+        # output shape je uložený výstupný tvar vrstvy. Na základe hodnoty apply_changes sa vyhodnocuje, či je
+        # potrebné aplikovať zmeny. Pomocou cords_changed je prenášaná informácia o tom, či boli zmenené sú-
+        # radnice a preto je potrebné prenastaviť body zobrazované v grafe. Pod kľúčom output_dimension je
+        # možné nájsť výstupnú dimenziu vrstvy. Hodnota premennej layer_name, ako už názov napovedá obsa-
+        # huje názov vrstvy. Na základe max_visible dim je možné zistiť, akú dimenziu je možné maximál-
+        # ne zobraziť. Axis labels obsahuje odkaz na zoznam označení osí grafu. Number_of_samples po-
+        # skytuje informáciu o počte načítaných bodov.
         self.__layer_config['has_feature_maps'] = self.__has_f_maps
         self.__layer_config['output_shape'] = self.__output_shape
         self.__layer_config['apply_changes'] = False
         self.__layer_config['cords_changed'] = False
-        self.__layer_config['has_feature_maps'] = self.__has_f_maps
         self.__layer_config['output_dimension'] = self.__output_dim
         self.__layer_config['layer_name'] = self.__layer_name
         self.__layer_config['max_visible_dim'] = number_of_cords
-
         self.__layer_config['axis_labels'] = axis_labels
         self.__layer_config['number_of_samples'] = 0
 
+        # Nasledujúce hodnoty v rámci konfiguračnej premennej obsahujú informácie o tom, čo a ako má byť v grafe zobra-
+        # zené. Pod kľúčom possible_polygon sa nachádza hodnota pojednávajúca o tom, či môže byť na vrstve vykreslená
+        # priestrová mriežka. Color_labels informuje o tom, či majú byť body grafu ofarbené v závislosti od prísluš-
+        # nosti k triede. Show_polygon pojednáva o tom či v prípade, ak je možné vykresliť na danej vrstve priesto-
+        # rovú mriežku má byť táto mriežka zobrazená.
         self.__layer_config['possible_polygon'] = False
         self.__layer_config['color_labels'] = False
         self.__layer_config['show_polygon'] = False
         self.__layer_config['locked_view'] = False
 
+        # Podľa toho, či je počet súradníc, ktoré možno zobraziť rovný trom, je do kofnigruačnej premennej priradená
+        # ifnormácia o tom, či je možné prepínať medzi 2D a 3D zobrazením
         if number_of_cords >= 3:
+
+            # Ak počet prípustných zobrazených súradníc je rovný 3, je do konfiguračného súboru zapísané, že je povolené
+            # prepínať medzi 2D a 3D zorbazením.
             self.__layer_config['draw_3d'] = True
         else:
+
+            # Ak počet prírpustných zobrazených súradníc nie je 3, používateľ nemá možnosť prepínať medzi 2D a 3D zobra-
+            # zením.
             self.__layer_config['draw_3d'] = False
+
+        # Je definováná aktuálne použitá metóda na redukciu priestoru, ktorá je uložená pod kľúčom used_method. Pod kľú-
+        # čom config_selected_method je informácia pre panel možností, ktorý nesie informáciu o tom, na ktorú metódu
+        # používateľ naposledy klikol.
         self.__layer_config['used_method'] = 'No method'
         self.__layer_config['config_selected_method'] = 'No method'
 
+        # V nasledujúcej časti sú definované konfigurácie, ktoré v sebe nesú nasavenia pre výpočet a zobrazenie metód
+        # na redukciu priestoru. Najskôr sú definované hodnoty, ktoré bude táto konfiguračná peremenná obsahovať.
+        # Konfigruacia pre metódu na redukciu No method obsahuje zoznam súradníc, ktoré majú byť po výpočte zo-
+        # brazené. Konfigurácia pre metódu PCA obsahuje zoznam súradníc, ktoré majú byť zobrazené, počet prí-
+        # pustných hlavných komponentov a odkazy na pandas dataframe a series inštanice, ktoré obsahujú in-
+        # formácie o výstupe metódy PCA.
         no_method_config = {'displayed_cords': None}
         pca_config = {'displayed_cords': None,
                       'n_possible_pc': 0,
@@ -1038,13 +1107,23 @@ class NeuralLayer:
                       'largest_influence': None,
                       }
 
+        # Metóda t-SNE je určená pre vizualizáciu viac dimenzionálnych dát. Dáta dokáže transformovať maximálne do troch
+        # dimenzií. Toto číslo získame na základe výsledku funkcie na získanie minima z počtu výstupných dimenzií a
+        # čísla 3.
         number_t_sne_components = min(self.__output_dim, 3)
+
+        # Konfigurácia pre metódu t-SNE pozostáva z viacerých častí. Prvá čast obsahuje parametre pre jej výpočet.
+        # Hodnoty týchto parametrov boli nastavené podľa dokumentácie k metóda t-SNE v knižnici sklearn.
         used_config = {'n_components': number_t_sne_components,
                        'perplexity': 30,
                        'early_exaggeration': 12.0,
                        'learning_rate': 200,
                        'n_iter': 1000}
 
+        # Parametre bude používateľ schopný meniť a preto tieto vstupy bude potrebné ošetriť a zistiť či sú valídne,
+        # preto je vytvorený slovník obsahujúci pod identifikátorom parametra požadovaný typ a hranice prípustné
+        # pre príslušný parameter. Vďaka tomu, že sú kľúče zhodné s názvami parametrov, bude možné načítané
+        # vstupy v rámci cyklu jednoducho skontrolovať.
         parameter_borders = {'n_components': (1, int, number_t_sne_components),
                              'perplexity': (0, float, float("inf")),
                              'early_exaggeration': (0, float, 1000),
@@ -1052,27 +1131,34 @@ class NeuralLayer:
                              'n_iter': (250, int, float("inf"))
                              }
 
+        # Jedodtlivé časti konfigurácie pre metódu t-SNE sú priradené do premennej. Premenná obsahuje aj kľúč options_pa
+        # -rameter, pod ktorým sa skrývajú hodnoty, ktoré používateľ navolil v paneli možností no možno ich ešte nepou-
+        # žil.
         t_sne_config = {'used_config': used_config,
                         'options_config': used_config.copy(),
                         'parameter_borders': parameter_borders,
                         'displayed_cords': None}
 
+        # Do konfiguračného súboru sú pridelené konfigurácie jednotlivých metód.
         self.__layer_config['no_method_config'] = no_method_config
         self.__layer_config['PCA_config'] = pca_config
         self.__layer_config['t_SNE_config'] = t_sne_config
 
+        # Na záver je pre všetky metódy nastaviť valídne základné súradnice, ktoré majú byť zobrazené.
         self.set_default_cords()
 
     def apply_displayed_data_changes(self):
-        '''
+        """
         Popis
-        --------
-        Aplikovanie zmien po prepočítaní súradníc.
-        '''
-        # Je potrbné podľa navolených zobrazovaných súradníc priradiť z prepočítaných jednotlivé súradnice do súradníc
-        # zobrazovaných.
-        self.set_used_cords()
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda nastaví dáta, ktoré sa majú zobraziť, ak náhodou došlo k zmenám metód na redukciu priestoru na danej vr-
+        stve.
+        """
+        # Podľa toho, či sú načítané nejaké vstupy sa buď to vykoná požadovaná metóda na redukciu alebo metóda skončí.
         if self.__has_points:
+
+            # Ak boli načítané nejaké vstupy je podľa použitej metódy na redukicu priestoru použitá metóda na jej výpo-
+            # čet.
             used_method = self.__layer_config['used_method']
             if used_method == 'No method':
                 self.apply_no_method()
@@ -1080,9 +1166,20 @@ class NeuralLayer:
                 self.apply_PCA()
             elif used_method == "t-SNE":
                 self.apply_t_SNE()
+
+            # Na zákalde zvolenej metódy na redukciu priestoru sú nastavené súradnice, ktoré sa majú byť zobrazené.
+            self.set_used_cords()
+            # Na záver sú triede zodpovednej za vykreslenie výstupu vrstvy nastavené požadované súradnice na zobrazenie.
             self.set_points_for_graph()
 
     def set_points_for_graph(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Podľa použitej metódy nastaví zobrazované údaje. Ak je nie je použitá žiadna metóda na redukciu a na vrstve je
+        zvolená možnosť pre vykreslenie priestorovej mriežky, sú nastavené aj hodnoty začiatočných a koncových bodov
+        hrán.
+        """
         used_method = self.__layer_config['used_method']
         self.set_displayed_cords()
         if used_method == 'No method':
@@ -1091,6 +1188,12 @@ class NeuralLayer:
                     self.set_displayed_cords_for_polygon()
 
     def set_used_cords(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Z konfigruačnej premennej na základe použitej metódy na redukciu priestoru získa súradnice, ktoré sa majú na
+        výstupe majú zobraziť. Tie sú uložené do atribútu used_cords.
+        """
         used_method = self.__layer_config['used_method']
         if used_method == 'No method':
             self.__used_cords = self.__layer_config['no_method_config']['displayed_cords']
@@ -1100,100 +1203,243 @@ class NeuralLayer:
             self.__used_cords = self.__layer_config['t_SNE_config']['displayed_cords']
 
     def set_displayed_cords_for_polygon(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Podľa požadovaných súradníc na zobrazenie sú vybraté súradnice začiatočných a koncových bodov priestorovej mrie-
+        žky. Z týchto bodov je následne vytvorený list súradníc.
+        """
+        # Na základe zoznamu požadovaných súradníc su pre jednotlivé začiatočne a koncové body zvolené príslušné hodno-
+        # ty. Tieto sú transponované
         tmp1 = self.__poly_cords_t[0][self.__used_cords].transpose()
         tmp2 = self.__poly_cords_t[1][self.__used_cords].transpose()
         self.__graph_frame.plotting_frame.line_tuples = list(zip(tmp1, tmp2))
 
     def set_displayed_cords(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Pre vykresľovaný graf, (ak je vytvorená inštancia tejto triedy) sú nastavené hodnoty, ktoré chce používateľ zo-
+        braziť. Nastavenie týchto hodnôt závisí od typu výstupy z vrstvy.
+        """
+        # Skontroluje sa, či existuje inštancia, ktorej majú byť nastavené hodnoty pre zobrazenie.
         if self.__graph_frame is not None:
-            if self.__has_f_maps:
-                used_method = self.__layer_config['used_method']
-                if used_method == 'No method':
-                    if len(self.__method_cords) != 0:
-                        feature_map_points = self.__method_cords[self.__selected_feature_map, :, :, :].transpose()
-                        self.__graph_frame.plotting_frame.points_cords = feature_map_points[:, self.__used_cords[0],
-                                                                         self.__used_cords[1]].transpose()
-                else:
-                    if len(self.__method_cords) != 0:
-                        self.__graph_frame.plotting_frame.points_cords = self.__method_cords[self.__used_cords]
-            else:
+            # Ak áno testuje sa o aky typ výstupu ide.
+            if self.__has_f_maps and self.__layer_config['used_method'] == 'No method':
+                # Ak sa na výstupe nachádzajú feature mapy a nie je použitá žiadna z metód na redukciu priestoru, test-
+                # uje sa, či sú nastavené súradnice pre zobrazenie.
                 if len(self.__method_cords) != 0:
+                    # Ak sú súradnice nastavené, na základe  atribútu so zvolenou feature mapou je zvolený výstup
+                    # zodpovedajúcí aktivácií načítaných bodov pre danú feature mapu. Z hodnôt výstupov jedno-
+                    # tlivých obrázkov pre túto feature mapu sú zvolené zadané súradnice.
+                    feature_map_points = self.__method_cords[self.__selected_fm, :, :, :].transpose()
+                    self.__graph_frame.plotting_frame.points_cords = feature_map_points[:, self.__used_cords[0],
+                                                                     self.__used_cords[1]].transpose()
+            else:
+                # V prípade že na výstupe vrstvy sa nachádzajú feature mapy, alebo je použitá niektorá z metód na red-
+                # ukciu priestoru, skontorluje sa, či sú zadané súradnice na zobrazenie pre metódu.
+                if len(self.__method_cords) != 0:
+                    # Ak sú súradnice nastavené, sú grafu priradené hodnoty, ktoré majú byť zobrazené. Tieto hodnoty
+                    # závisia od metódy a taktiež požadovaných zobrazených hodnôt pre túto metódu.
                     self.__graph_frame.plotting_frame.points_cords = self.__method_cords[self.__used_cords]
 
     def apply_no_method(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda, ktorá sa zavolá ak nie je nastavená žiadna ina metóda na redukciu priestoru. Spočíva v jednoduchom
+        priradení hodnôt výstupu vrstvy vypočítaných na zákalde predikcie neurónovej siete.
+        """
         self.__method_cords = self.__point_cords.copy()
 
     def apply_PCA(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda vykoná výpočet metódy PCA. Postup pri výpočte sa v niektorých častiach líši s ohľadom na to, či je výstup
+        z vrsty vo forme feature máp alebo nie.
+        """
+        # Pri vykonávaní metódy môže dôjsť k tomu, že nastane delenie nulou. Vtedy by bolo vypísané varovanie. Pomocou
+        # tohto príkazu je tento varovný výpis potlačený.
         np.seterr(divide='ignore', invalid='ignore')
+
+        # Spracovanie bodov pred použitím metódy závisí od toho či su výstupom vrstvy feature mapy alebo nie.
         if self.__has_f_maps:
-            feature_map_points = self.__point_cords[self.__selected_feature_map, :, :, :].transpose()
+
+            # Ak sa na výstupe vrstvy nachádzajú feature mapy, sú podľa zvolenej feature mapy vybrané príslušné feature
+            # mapy pre každý zo vstupov. Hodnoty sú získane z atribútu obsahujúce výstupy pre danú vrstvu, získané na
+            # základe predpovede keras modelu. Tieto feature mapy, väčšinou vo forme polí, sú potom pre jednotlivé
+            # vstupy transformované na vektory a vložené do premennej.
+            feature_map_points = self.__point_cords[self.__selected_fm, :, :, :].transpose()
             points_cords = np.array([xi.flatten() for xi in feature_map_points])
         else:
+
+            # Ak výstup neobsahuje feature mapy, sú body pre metódu získané jednoducho prekopríovaním hodnôt získaných
+            # získaných predikciou výstupu pre danú vrstvu pomocou keras modelu.
             points_cords = self.__point_cords.transpose().copy()
+
+        # Načítané body je potrebné následne normalizovať. Na to je použitá funkcia z knižnice sklearn. Normalizácia je
+        # potrebná, pretože metóda by vyšším hodnotám prikladala väčší význam čo sa týka vysvetlenej variability, aj
+        # keď by to nemusela byť pravda v prípade keď budú dáta štandardizované.
         scaled_data = preprocessing.StandardScaler().fit_transform(points_cords)
         pca = PCA()
+
+        # Normalizvané dáta sú vložené do funkcie, ktorá zistí hodnoty vlastných vektorov na základe týchto dát.
+        # Potom ako sú hodnoty vlastných vektorov nastavené, sú pomocou nich dáta transformované a priradené
+        # do pomocnej premennej. Dáta v tejto pomocnej premennej zobrazujú transformované súradnice bodov
+        # prislúchajúce jednotlivým hlavným komponentom.
         pca.fit(scaled_data)
         pca_data = pca.transform(scaled_data)
-        pcs_components_transpose = pca_data.transpose()
-        self.__method_cords = pcs_components_transpose
-        number_of_pcs_indexes = min(self.__output_dim, pca.explained_variance_ratio_.size)
+
+        # Súradnice sú následne transponované a priradené do atribútu obsahujúce výstupné hodnoty po aplikácií niektorej
+        # z metód na redukciu priestoru.
+        self.__method_cords = pca_data.transpose()
+
+        # Do pomocnej premennej priradíme počet vzniknutých hlavných komponentov.
+        number_of_pcs_indexes = pca.explained_variance_ratio_.size
         if number_of_pcs_indexes > 0:
+            # Ak boli vypočítané niektoré hlavné komponenty, sú informácie získané na základe výstupu z metódy priradené
+            # do konfiguračného súboru PCA metódy. Tieto informácie môžu byť následne zobrazené v panele možností.
+            # Najskôr je vytvorená pandas séria obsahujúca informácie o tom, koľko variability vysvetľujú jedno-
+            # tlivé hlavné komponenty. Séria má index podľa mena jednotlivých komponentov. Prvý komponent vždy
+            # vysvetľuje najviac variability. Ako posledné je vytvorený pandas dataframe, ktorý obsahuje info-
+            # rmácie o vplyve prvkov výstupu na jednotlivé hlavné komponenty. Indexy tohoto dataframe sú pri-
+            # radené na zákalde atribútu, obsahujúceho názvy pre tieto prvky.
             self.__layer_config['PCA_config']['percentage_variance'] = pd.Series(
                 np.round(pca.explained_variance_ratio_ * 100, decimals=1),
                 index=self.__pc_labels[:number_of_pcs_indexes])
-            self.__layer_config['PCA_config']['largest_influence'] = pd.DataFrame(pca.components_.transpose(),                                                                           index=self.__activ_nodes_l)
+            self.__layer_config['PCA_config']['largest_influence'] = pd.DataFrame(pca.components_.transpose(),
+                                                                                  index=self.__activ_nodes_l)
 
     def apply_t_SNE(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda, ktorá sa použije ak bola na redukciu priestoru použitá metóda t-SNE.
+        """
+        # Najskôr je do pomocnej premennej priradený dictionary, ktorý obsahuje hodnoty parametrov na výpočet tejto
+        # metódy.
         t_sne_config = self.__layer_config['t_SNE_config']
+        # Podľa toho, či sa na výstupe nachádzajú feature mapy sú do pomocnej premennej priradené hodnoty predpovedaných
+        # výstupov.
         if self.__has_f_maps:
-            feature_map_points = self.__point_cords[self.__selected_feature_map, :, :, :].transpose()
+
+            # Ak sa na výstupe nachádzajú feature mapy, tak na zákalde zvolenej feature mapy sú vybraté aktivácie pre 
+            # zodpovedajúce tejto feature mape pre všetky body. Metóda t-SNE pracuje len s vektormi, preto je potre-
+            # bné jednotlivé výstupy preransformovať a vložiť do pomocnej premennej.
+            feature_map_points = self.__point_cords[self.__selected_fm, :, :, :].transpose()
             points_cords = np.array([xi.flatten() for xi in feature_map_points])
         else:
+
+            # Ak sa na výstupe feature mapy nenáchádzajú sú body transponované aby príznaky prislúchajúce jednotlivým 
+            # bodom boli zoradené v stĺpcoch.
             points_cords = self.__point_cords.transpose().copy()
+        # Následne je inicializovaná trieda pre výpočet metódy t-SNE na základe použitej konfigurácie. Následne je usku-
+        # točnená metóda t-SNE a výstup je transponovaný a vložený do atríbútu držiaceho súradnice, ktoré majú byť
+        # zobrazené.
         tsne = TSNE(**t_sne_config['used_config'])
         transformed_cords = tsne.fit_transform(points_cords).transpose()
         self.__method_cords = transformed_cords
 
     def clear(self):
-        '''
+        """
         Popis
-        --------
-        Používat sa pri mazaní. Vyčistí premenné a skryje danú vrstvu.
-        '''
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda vyčistí grafické zobrazenie neurónovej vrstvy, ak je nejaké zobrazované.
+        """
         if self.__graph_frame is not None:
             self.__graph_frame.clear()
             self.__graph_frame = None
 
     def signal_change(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda posúva signal o zmene váhy logickej vrstve.
+        """
         self.__logic_layer.signal_change_on_layer(self.__layer_number)
 
     def set_polygon_cords(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        V rámci tejto metódy je vyžiadané nastavenie výstupných súradníc zodpovedajúcich začiatočným a koncovým bodom
+        priestrovoej mriežky.
+        """
         self.__logic_layer.set_polygon_cords(self.__layer_number)
         self.apply_displayed_data_changes()
 
     def require_graphs_redraw(self):
-        self.__logic_layer.redraw_active_graphs(-1)
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda vyžiada prekreslenie všetkých aktívnych grafov.
+        """
+        self.__logic_layer.redraw_active_graphs()
 
     def redraw_graph_if_active(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Ak je vytvorená grafická reprezentácia výstupu vrstvy je pomocou inštancie triedy PlottingFrame.
+        """
         if self.__graph_frame is not None:
             self.__graph_frame.redraw_graph()
 
     def use_config(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Ak je vytvorená grafická reprezentácia výstupu vrstvy je pre inštanciu tejto triedy použitá nastavená konfigu-
+        rácia.
+        """
         if self.__visible:
+            # V závislosti od toho, či na vrstve došlo k zmenám, na základe ktorých je potrebne vykonať nové výpočty sú
+            # vykonané nasledujúce časti kódu.
             if self.__layer_config['apply_changes']:
+                # Ak boli vykonané zmeny, ktoré vyžadujú uskutočnenie výpočtov, pokračcuje s touto vetvou. Po vykonaní
+                # výpočtov sú príznakové premenné opäť nastavené na False.
                 self.apply_displayed_data_changes()
                 self.__layer_config['cords_changed'] = False
                 self.__layer_config['apply_changes'] = False
             elif self.__layer_config['cords_changed']:
+
+                # V prípade ak došlo k zmenám len ohľadom zobrazovaných súradníc, nie je potrebné vykonávať nové výpočty
+                # pretože výstupne hodnoty všetkých súradníc sa nachádzajú v atribúte method cords. Pomocou tohto atri-
+                # bútu sú nové súradnice zobrazené. Na záver je príznaková premenná opäť nastavená na False.
                 self.set_used_cords()
                 self.set_points_for_graph()
                 self.__layer_config['cords_changed'] = False
+
+            # Nová konfigurácia je následne nastavená inštancií na zobrazovanie výstupov.
             self.__graph_frame.apply_config(self.__layer_config)
 
     def create_graph_frame(self, options_command, hide_command):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        V tejto metóde je vytvorená a inicializovaná inštancie triedy GraphFrame, ktorá slúži na vykreslenie výstupu
+        vrstvy a ovládanie váh.
+
+        Parametre
+        ----------------------------------------------------------------------------------------------------------------
+        :param options_command: odkaz na funkciu, ktorá sa má zavolať po kliknutí na tlačidlo options v rámci inštancie
+                                triedy GraphFrame.
+        :param hide_command:    odkaz na funkciu, ktorá sa má zavolať po kliknutí na tlačidlo hide v rámci inštancie
+                                triedy GraphFrame.
+
+        Návratová hodnota
+        ----------------------------------------------------------------------------------------------------------------
+        :return návratová hodnota tejto metódy je odkaz na inštanciu triedy GraphFrame, ktorá obsahuje ovládač váh
+                a graf na vykrslovanie
+        """
+        # Ak by náhodou bola inštancia už vytvorená, je táto vyčistiená referencia na ňu je zrušená.
         if self.__graph_frame is not None:
             self.__graph_frame.clear()
             self.__graph_frame = None
+        # Následne je vytvorená nová inštancia triedy GraphFrame a je inicializovaná. Do metódy inicializácie je záslaný
+        # odkaz na danú vrstvu neurónovej siete a taktiež odkaz na funkcie, ktoré sa majú zavolať po kliknutí tlačidiel
+        # Options a Hide.
         self.__graph_frame = GraphFrame(self.__has_f_maps)
         self.__graph_frame.initialize(self, options_command, hide_command)
 
@@ -1201,33 +1447,81 @@ class NeuralLayer:
         return self.__graph_frame
 
     def set_default_cords(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        V rámci tejto metódy sú nastavené základné súradnice, ktoré majú byť zobrazené pri použití jednej z metód na
+        redukciu priestoru.
+        """
+        # Z konfiguračnej premennej je zistený počet načítaných vstupov a dimenzia výstupu vrstvy. Na základe výstupnej
+        # dimenzie vrstvy je zistený maximálny možný počet zobrazených súradníc. Ten je získaný ako minimu z hodnoty 3
+        # a počtu výstupných dimenzií.
         n_of_samples = self.__layer_config['number_of_samples']
         o_dimension = self.__layer_config['output_dimension']
         number_of_cords = min(3, o_dimension)
-        predefined_cords = None
         if self.__has_f_maps:
+            # Ak vrstva na výstupe obsahuje feature mapy, je potrebné nastaviť súradnice, ktoré majú byť použite pre
+            # zobrazenie bez použitia metódy na redukciu priestoru, odlišne ako v iných prípadoch, pretože pri
+            # tomto prípade sú súradnice kvôli konfortu zadávané v inom formáte.
             predefined_cords = [[], []]
+            # Podľa možného počtu zobrazených súradníc sú preddefinované hodnoty, ktoré majú byť v rámci feature máp zo-
+            # brazené.
             for i in range(number_of_cords):
                 x_cord = i
                 y_cord = i
-                if y_cord > self.__output_shape[-3]:
-                    y_cord = self.__output_shape[-3] - 1
-                if x_cord > self.__output_shape[-2]:
-                    x_cord = self.__output_shape[-2] - 1
+                # Je potrebné ošetriť aby neboli feature mapám nastavené nesprávne indexy. To by mohlo nastať napríklad
+                # ak by mala feature mapa tvar 2x1. Defaultne sú súradnice priradzované po diagonále. V prípade že by
+                # mala byť porušená podmienka je na miesto použitá posledná možná súradnica.
+                if x_cord >= self.__output_shape[-3]:
+                    x_cord = self.__output_shape[-3] - 1
+                if y_cord >= self.__output_shape[-2]:
+                    y_cord = self.__output_shape[-2] - 1
                 predefined_cords[0].append(x_cord)
                 predefined_cords[1].append(y_cord)
         else:
+
+            # V prípade ak sa na výstupe feature mapy nenachádzajú, sú jednoducho pre zobrazenie zvolené prvé 3 výstupné
+            # údaje.
             predefined_cords = []
             for i in range(number_of_cords):
                 predefined_cords.append(i)
 
+        # Následne sú definované aj základné súradnice pre ostatné metódy.
         self.__layer_config['no_method_config']['displayed_cords'] = predefined_cords
-        pca_config = self.__layer_config['PCA_config']
-        pca_config['displayed_cords'] = list(range(min(n_of_samples, o_dimension, 3)))
-        t_sne_config = self.__layer_config['t_SNE_config']
-        t_sne_config['displayed_cords'] = list(range(t_sne_config['used_config']['n_components']))
+        # Prípustné zobrazené súradnice metódy PCA závisia od toho, aká je výstupná dimenzia, aký je počet načítaných
+        # vstupov, no sú limitované aj tým, že je možne zobraziť maximálne 3D graf. Na základe týchto podmienok je
+        # preto vytvorený list súradníc na základe týchto obmedzení.
+        self.initialize_default_PCA_cords()
+        # Pri metóde t-SNE je situácia takmer podobná ako pri metóde PCA, no počet možných súradníc je však priamo nas-
+        # tavený na základe parametra na výpočet metódy t-SNE.
+        self.initialize_default_tSNE_cords()
+
+    def initialize_default_PCA_cords(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Nastaví v rámci konfiguračnej premennej prípustné zobrazované súradnice pre metódu PCA.
+        """
+        self.__layer_config['PCA_config']['displayed_cords'] = list(range(min(self.__layer_config['number_of_samples'],
+                                                                              self.__layer_config['output_dimension'],
+                                                                              3)))
+
+    def initialize_default_tSNE_cords(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Nastaví v rámci konfiguračnej premennej prípustné zobrazované súradnice pre metódu t-SNE.
+        """
+        self.__layer_config['t_SNE_config']['displayed_cords'] = list(range(
+                                                    self.__layer_config['t_SNE_config']['used_config']['n_components']))
 
     def signal_feature_map_change(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda, ktorá sa zavolá pri zmene feature mapy. Pre túto feature mapu sú nastavené zobrazované súradnice a je
+        prekreslený aj graf. Ak je vrstva práve zobrazená na panele možností, je aktualizovaný aj panel možností.
+        """
         self.apply_displayed_data_changes()
         self.redraw_graph_if_active()
         self.__logic_layer.require_options_bar_update(self)
@@ -1297,7 +1591,6 @@ class NeuralLayer:
             self.__layer_config['possible_polygon'] = True
         else:
             self.__layer_config['possible_polygon'] = False
-            self.__displayed_lines_cords = None
 
     @property
     def possible_color_labels(self):
@@ -1345,52 +1638,86 @@ class NeuralLayer:
 
     @property
     def selected_feature_map(self):
-        return self.__selected_feature_map
+        return self.__selected_fm
 
     @selected_feature_map.setter
     def selected_feature_map(self, new_value):
-        self.__selected_feature_map = new_value
+        self.__selected_fm = new_value
 
 
 class GraphFrame(QFrame):
     def __init__(self, has_feature_maps, *args, **kwargs):
-        '''
+        """
         Popis
-        --------
-        Obaľovacia trieda. Zodpovedá za vytvorenie vykaresľovacieho grafu a ovládača váh.
-
+        ----------------------------------------------------------------------------------------------------------------
+        Obaľovacia trieda obsahujúca inštanciu triedy zodpovednej za vykresľovanie výstupov na príslušnej vrstve a 
+        inštanciu ovládača váh pre danú vrstvu. Výstup tejto vrstvy je zobrazovaný pomocou triedy PlottingFrame a 
+        váhy na tejto vrstve je možné meniť pomocou inštancie triedy LayerWeightControllerFrame.
+        
         Atribúty
-        --------
-        :var self.__graph: vykresľovacia trieda, zodpoveda za vykresľovanie bodov na vrstve
-        :var self.__weight_controller: zmena koeficientov váh v danej vrstve
-
+        ----------------------------------------------------------------------------------------------------------------
+        :var self.__neural_layer:   odkaz na inštanciu triedy NeuralLayer. 
+        :var self.__has_fmaps:      informácia o tom, či sú na výstupe vrstvy dostupné feature mapy.
+        :var self.__options_btn:    odkaz na inštanciu grafického prvku QPushButton, ktorý slúži na zobrazenie možnosti
+                                    vrstvy na panele možností.
+        :var self.__hide_btn:       odkaz na inštanciu grafického prvku QPushButton, ktorý slúži na skrytie grafického
+                                    zobrazenia danej vrstvy.
+        :var self.__graph:          inštancia triedy PlottingFrame, ktorá zabezpečuje vykresľovanie poskytnutých hodnôt.
+        :var self.__feature_map_cb: podľa toho, či sú na výstupe vrstvy prítomné feature mapy, táto premenná obsahuje
+                                    odkaz na inštanciu triedy QComboBox alebo hodnotu None. Tento combobox zobrazuje,
+                                    ktorá feature mapa je zobrazovaná na výstupe
+        :var self.__w_controller:   odkaz na ovládač váh na prislušnej vrstve. Odkazovať sa na inštanciu triedy v
+                                    závislosti od toho, či sú na výstupe vrstvy feature mapy alebo nie.
+        
         Parametre
-        --------
-        :param neural_layer: odkaz na NeuralLayer, pod ktroú patrí daný GraphFrame
-        :param parent: nadradený tkinter Widget
-        '''
+        ----------------------------------------------------------------------------------------------------------------
+        :param has_feature_maps: bool hodnota, nesúca informáciu o tom, či sú na výstupe vrstvy prítomné feature mapy.
+        :param args: argumenty pre konštruktor predka.
+        :param kwargs: keyword argumenty pre konštruktor predka.
+        """
+        # Je zavolaný konštruktor predka.
         super(GraphFrame, self).__init__(*args, **kwargs)
+        # Sú definované a incializované atribúty.
         self.__neural_layer = None
-        self._has_feature_maps = has_feature_maps
+        self.__has_fmaps = has_feature_maps
         self.__options_btn = QPushButton()
         self.__hide_btn = QPushButton()
-        self.__graph = PlotingFrame()
+        self.__graph = PlottingFrame()
 
-        self.__weight_dict = {}
-        self.__weight_names_ordered = []
+        # Podľa toho, či sú na výstupe feature mapy alebo nie je do atribútu w_controller priradená inštancia príslušnej
+        # triedy a definovaná hodnota atibútu feature_map
+        if self.__has_fmaps:
 
-        if self._has_feature_maps:
+            # Ak sa na výstupe vrstvy feature mapy nachádzajú je atribútu feature_map_cb priradený odkaz na inštanciu
+            # triedy QComboBox. Do atribútu w_controller je priradený odkaz na inštanciu triedy
+            # FMWeightControllerFrame.
             self.__feature_map_cb = QComboBox()
-            self.__weight_controller = FMWeightControllerFrame()
+            self.__w_controller = FMWeightControllerFrame()
         else:
+
+            # Ak sa na výstupe vrstvy feature mapy ne nachádzajú je atribútu feature_map_cb priradená hodnota None.
+            # Do atribútu w_controller je priradený odkaz na inštanciu triedy NoFMWeightControllerFrame.
             self.__feature_map_cb = None
-            self.__weight_controller = NoFMWeightControllerFrame()
+            self.__w_controller = NoFMWeightControllerFrame()
         self.init_ui()
 
     def init_ui(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Inicializácia grafických prvkov.
+        """
+        # Oknu je nastavená maximálna šírka 500 pixelov. Predkovy je priradené objektové meno na zákalde ktorého je mu
+        # priradené vonkajšie orámovanie.
         self.setMaximumWidth(500)
         self.setObjectName('graphFrame')
         self.setStyleSheet("#graphFrame { border: 1px solid black; } ")
+
+        # Je vytvorené hlavné rozmiestnenie. Je nastavený zobrazovaný text na oboch tlačidlách. Na vrchu hlavného roz-
+        # miestnenia je definované ďalšie rozmiestnenie, v ktorom budú ležať tlačidlá pre zobrazenie možností na pa-
+        # nele možností a pre skrytie vrstvy. Podľa toho, či sú na výstupe definované feature mapy je do rozmiest-
+        # nenia vložený aj ComboBox, držiaci zoznam feature máp, ktoré je možné zobraziť. Na záver sú do hlav-
+        # ného rozmiestnenia priadné inštancie triedy PlottingFrame a WeightControllerFrame.
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setAlignment(QtCore.Qt.AlignTop)
@@ -1399,49 +1726,84 @@ class GraphFrame(QFrame):
         layout.addLayout(buttons_wrapper_layout)
         self.__options_btn.setText('Options')
         buttons_wrapper_layout.addWidget(self.__options_btn, alignment=QtCore.Qt.AlignLeft)
-        if self._has_feature_maps:
+        if self.__has_fmaps:
             buttons_wrapper_layout.addWidget(self.__feature_map_cb)
         self.__hide_btn.setText('Hide')
         buttons_wrapper_layout.addWidget(self.__hide_btn, alignment=QtCore.Qt.AlignRight)
         self.setLayout(layout)
         layout.addWidget(self.__graph)
-        layout.addWidget(self.__weight_controller)
+        layout.addWidget(self.__w_controller)
 
     def initialize(self, neural_layer: NeuralLayer, options_command=None, hide_command=None):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        V závislosti od príslušnej neurónovej vrstvy sú nastavené hodnoty jednotlivých atribútov.
+
+        Parametre
+        ----------------------------------------------------------------------------------------------------------------
+        :param neural_layer:    odkaz na neurónovú vrstvu, ktorej výstup má zobrazovať a ktorej bude možné meniť váhy.
+        :param options_command: odkaz na funkciu, ktorá sa má zavolať pri kliknutí na tlačidlo Options.
+        :param hide_command:    odkaz na funkciu, ktorá sa má zavolať pri kliknutí na tlačidlo Hide.
+        """
         self.__neural_layer = neural_layer
         if options_command is not None:
+
+            # Ak bol poskytnutý odkaz na funkciu option_command je táto funkcia pripojená na signál, ktorý sa vyvolá
+            # po kliknutí na toto tlačidlo. Funkcia je obalená do lambda funkcie, aby bolo možné poskytnúť aj
+            # argument funkcie, konrétne číslo príslušnej vrstvy, aby ju bolo možné identifikovať.
             self.__options_btn.clicked.connect(lambda: options_command(self.__neural_layer.layer_number))
         if hide_command is not None:
+
+            # Ak bol poskytnutý odkaz na funkciu hide_command je táto funkcia pripojená na signál, ktorý nastane, ak
+            # bolo na tlačidlo kliknuté. Funkcia je obalená v lambda funkcií, aby bolo možné, do funkcie zodpovednej
+            # za skrytie vrstvy, zaslať identifikátor v podobe čísla príslušnej vrstvy.
             self.__hide_btn.clicked.connect(lambda: hide_command(self.__neural_layer.layer_number))
 
-        start = time.perf_counter()
+        # Následne je inicializovaná inštancia PlottingFrame, ktorej parametre získame z poskytnutej inštancie triedy
+        # NeuralLayer.
         self.__graph.initialize(self, neural_layer.output_dimension, neural_layer.points_cords,
                                 neural_layer.points_config, neural_layer.layer_name)
 
-        end = time.perf_counter()
-        print(f'Graph initialization {end - start} s')
-        if self._has_feature_maps:
+        # Podľa toho, či sú na výstupe vrtvy prítomné feature mapy, sú incializované kontrolery a prípadne naplnený
+        # Combobox.
+        if self.__has_fmaps:
+            # Ak sú na výstupe vrstvy prítomne feature mapy, znamená to, že bol definovaný ComboBox, ktroý je potrebné
+            # naplniť prípustnými hodnotami. Najskôr je ComboBox vyčistený a je získaný výstupný tvar neurónovej
+            # vrstvy.
             self.__feature_map_cb.clear()
             output_shape = neural_layer.output_shape
+
+            # Z výstupného tvaru je možné zistiť počet výstupných feature máp. Na základe tohto údaju je v cykle
+            # naplnený combobox.
             for feature_map_index in range(output_shape[-1]):
                 self.__feature_map_cb.addItem('Feature map {}'.format(feature_map_index))
+            # Je nastavená funkcia, ktorá sa zavolá po vybratí nejakej z hodnôt ComboBoxu.
             self.__feature_map_cb.currentIndexChanged.connect(self.initialize_selected_feature_map)
-            self.__weight_controller.initialize(self, neural_layer.layer_weights, neural_layer.layer_biases,
+            # Na záver je inicializovaná inštancia triedy FMWeightControllerFrame.
+            self.__w_controller.initialize(self, neural_layer.layer_weights, neural_layer.layer_biases,
                                                 self.__feature_map_cb.currentIndex())
         else:
-            print('Weight initilization start')
-            start = time.perf_counter()
-            self.__weight_controller.initialize(self, neural_layer.layer_weights, neural_layer.layer_biases)
-            end = time.perf_counter()
-            print(f'Weight initialization {end - start} s')
+            # Je inicializovaná inštancia triedy NoFMWeightControllerFrame.
+            self.__w_controller.initialize(self, neural_layer.layer_weights, neural_layer.layer_biases)
 
     def initialize_selected_feature_map(self):
-        if self._has_feature_maps:
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda, ktorá je zavolaná pri požiadavke na zmenu zobrazovanej feature mapy.
+
+        """
+        if self.__has_fmaps:
+            # Je zistený index prvku, na ktorý bolo v rámci Comboboxu kliknuté a keďže sú v ňom prvky zoradené, index
+            # predstavuje feature mapu, ktorá ma byť zobrazená. Tento údaj je zaslaný do kontroléra, ktorý na
+            # základe neho zmení zobrazované vahý na váhy prisluchajúce danej feature mape. Údaj o zvolenej
+            # feature mape je nastavený aj atribútu príslušnej neurónovej vrstvy a následne je zavolaná
+            # funkcia, ktorá vykoná zmeny súvisiace so zmenou zobrazovanej feature mapy.
             selected_fm = self.__feature_map_cb.currentIndex()
-            self.__weight_controller.initialize_for_fm(selected_fm)
+            self.__w_controller.initialize_for_fm(selected_fm)
             self.__neural_layer.selected_feature_map = selected_fm
             self.__neural_layer.signal_feature_map_change()
-
 
     def weight_bias_change_signal(self):
         """
@@ -1452,21 +1814,48 @@ class GraphFrame(QFrame):
         self.__neural_layer.signal_change()
 
     def redraw_graph(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda ktorá zaistí aby došlo k prekresleniu grafu.
+        """
         self.__graph.redraw_graph()
 
     def clear(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda, ktorá slúži na vyčistenie inštancie triedy a taktiež kompozitných tried. Jej úlohou je uvoľniť používané
+        prostriedky. Na záver metódy je explicitne zavolaný garbge collector.
+        """
         self.__graph.clear()
         self.__graph = None
-        self.__weight_controller.clear()
+        self.__w_controller.clear()
         self.__graph = None
         self.deleteLater()
         gc.collect()
 
     def require_graphs_redraw(self):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Posúva signal nadradenej vrstve, signalizujúci potrebu prekreslenia všetkých grafov.
+        """
         self.__neural_layer.require_graphs_redraw()
 
     def apply_config(self, config):
-        # if self.__graph.is_initialized:
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Aplikuje poskytnutú konfiguráciu na inštanciu PlottingFrame.
+
+        Parametre
+        ----------------------------------------------------------------------------------------------------------------
+        :param config: príslušná konfigurácia, ktorá má byť aplikovaná na inštanciu PlottingFrame.
+        """
+        # Priestorovú mriežku je možné zobraziť, iba ak nie je použitá žiadna metóda redukcie priestoru. Ak je táto
+        # možnosť zvolená, je vykonaná len v závislosti od toho, aká metóda je použitá. Pri metódach PCA a t-SNE
+        # je vykresľovanie mriežky zakázané.
         if config['used_method'] == 'No method':
             self.__graph.draw_polygon = config['show_polygon']
         else:
@@ -2243,10 +2632,7 @@ class OptionsFrame(QWidget):
                 # konfiguračného súboru priradená zvolená metóda a aj v rámci panelu možností je nastavená
                 # hodnota pre premennú self.__cur_used_method značiaca práve používanú metódu.
                 if method == 'PCA':
-                    self.__changed_config['PCA_config']['displayed_cords'] = list(range(min(
-                                                                            self.__changed_config['output_dimension'],
-                                                                            self.__changed_config['number_of_samples'],
-                                                                            3)))
+                    self.__active_layer.initialize_default_PCA_cords()
 
                 need_recalculation = True
                 self.__changed_config['used_method'] = self.__cur_used_method = method
@@ -2389,7 +2775,7 @@ class OptionsFrame(QWidget):
             # Ak došlo k zmene, je potrebné na základe parametra pre metódu t-SNE nastaviť súradnice, ktoré sa majú
             # zobraziť na jednotlivých osiach.
             if changed:
-                t_sne_config['displayed_cords'] = list(range(used_config['n_components']))
+                self.__active_layer.initialize_default_tSNE_cords()
                 self.set_entries_not_marked(self.__tSNE_parameters_dict.values())
         return changed
 

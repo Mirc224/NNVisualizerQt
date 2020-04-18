@@ -1,5 +1,5 @@
-import queue
 import math
+import queue
 
 
 class Polygon:

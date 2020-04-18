@@ -2,8 +2,6 @@ from PyQt5 import QtCore, Qt
 from PyQt5 import QtGui
 from PyQt5.QtWidgets import *
 
-import time
-
 
 class ClickLabel(QLabel):
     clicked = QtCore.pyqtSignal()
