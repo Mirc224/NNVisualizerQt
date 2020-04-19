@@ -469,9 +469,6 @@ class PlottingFrame(QWidget):
                 # vyznačený na všetkých grafoch.
                 self.__master.require_graphs_redraw()
 
-    def __del__(self):
-        print('mazanie graf')
-
     ############################### GETTERS AND SETTERS ################################
     @property
     def graph_title(self):
@@ -571,12 +568,12 @@ class LayerWeightControllerFrame(QWidget):
         :var self._pos_n_of_sliders:celkový počet sliderov, ktoré je možné zobraziť.
         :var self._act_slider_dict: slovník obsahujúci referencie na vytvorené a aktívne slidre. Kľúčom je unikátne meno
                                     slidera.
-        :var self._scroll_win:      odkaz na grafický komponen obsahujúci aktívne slidre a AddRemoveCombobox pre ich
+        :var self._scroll_win:      odkaz na grafický komponen obsahujúci aktívne slidre a RemovingCombobox pre ich
                                     pridávanie.
         :var self._scroll_area_c:   widget, ktorý v sebe drží obsah scrollovacieho okna, tak aby sa pri dosiahnutí maxi-
                                     málnej možnej kapacity objavil scrollbar a bolo možné v tomto okne scrollovať.
         :var self._scroll_area_l:   rozmiestnenie v rámci obsahu scrollovacieho okna.
-        :var self._add_slider_rc:   inštancia triedy AddRemoveCombobox obsahujúca názvy (unikátne kľúče), sliderov, kto-
+        :var self._add_slider_rc:   inštancia triedy RemovingCombobox obsahujúca názvy (unikátne kľúče), sliderov, kto-
                                     ré môžu byť zobrazené.
         """
         super(QWidget, self).__init__(*args, **kwargs)
@@ -620,7 +617,7 @@ class LayerWeightControllerFrame(QWidget):
         self._scroll_area_l.setSpacing(2)
         self._scroll_area_l.setAlignment(QtCore.Qt.AlignTop)
 
-        # Scrollovaciemu oknu je nastavený obsahový lement. Do scrollovacieho okna je pridaný AddRemoveComobobox, kto-
+        # Scrollovaciemu oknu je nastavený obsahový lement. Do scrollovacieho okna je pridaný RemovingComboboxmbobox, kto-
         # rému je nastavená aj minimálna výška, aby sa pri zmene veľkosti okna nedeformoval do neprirodzených
         # rozmerov.
         self._scroll_win.setWidget(self._scroll_area_c)
@@ -631,7 +628,7 @@ class LayerWeightControllerFrame(QWidget):
         """
         Popis
         ----------------------------------------------------------------------------------------------------------------
-        Metóda testuje, či má byť zobrazený grafický prvok AddRemoveCombobox, podľa toho či už boli zobrazené všetky
+        Metóda testuje, či má byť zobrazený grafický prvok RemovingCombobox, podľa toho či už boli zobrazené všetky
         príspustné slidere.
         """
         if len(self._act_slider_dict) == self._pos_n_of_sliders:
@@ -643,7 +640,7 @@ class LayerWeightControllerFrame(QWidget):
         """
         Popis
         ----------------------------------------------------------------------------------------------------------------
-        Metóda je pripojená na AddRemoveCombobox a po zvolení niektorého zo sliderov je zavolaná. Na základe parametra
+        Metóda je pripojená na RemovingCombobox a po zvolení niektorého zo sliderov je zavolaná. Na základe parametra
         je identifikovaný požadovnaý slider a nasleduje jeho vytvorenie a inicializácia.
 
         Parametre
@@ -656,7 +653,7 @@ class LayerWeightControllerFrame(QWidget):
         if item[0] >= 0:
             # Ak bolo identifikačné číslo väčšie alebo rovné ako 0, tak používateľ chce zobraziť slider, ktorého unikát-
             # ne meno sa nachádza na druhej pozicií v rámci poskytnutého parametra. Najskôr je však potrebné zistiť, či
-            # už daný slider nie je zobrazený, pretože do AddRemoveComboxu je možné písať konrétne názvy sliderov, aby
+            # už daný slider nie je zobrazený, pretože do RemovingComboboxmboxu je možné písať konrétne názvy sliderov, aby
             # ich nebolo potrebné vyhľadávať v listboxe.
             if item[1] not in self._act_slider_dict.keys():
                 # Ak slider ešte nebol zobrazený, testuje sa, či zobrazením ďalšieho slidera nepresiahne počet zobraze-
@@ -672,14 +669,14 @@ class LayerWeightControllerFrame(QWidget):
                 # zobrazenie.
                 self.add_slider(item[1])
         else:
-            # V prípade, že bola zvolená špeciálna možnosť, sú z AddRemoveCombobox inštancie získané unikátne názvy ešte
+            # V prípade, že bola zvolená špeciálna možnosť, sú z RemovingCombobox inštancie získané unikátne názvy ešte
             # nezobrazených sliderov.
             list_of_remaining = self._add_slider_rc.get_list_of_visible()
             # Prvé dve hodnoty z tohto listu je však potrebné preskočiť, pretože ide o možnosti placeholder a
             # Select all.
             list_of_remaining = list_of_remaining[1:].copy()
             # Je overené či pridaním daného počtu sliderov nepresiahne počet sliderov kritickú hranicu.
-            if len(self._act_slider_dict) + len(list_of_remaining) > 6:
+            if len(self._act_slider_dict) + len(list_of_remaining) > 1500:
                 # Ak túto hranicu presiahne, je o tom používateľ informovaný a čaká sa od neho odpoveď či chce napriek
                 # tomu pokračovať.
                 if self.show_warning() != 0:
@@ -729,7 +726,7 @@ class LayerWeightControllerFrame(QWidget):
         else:
             self.create_bias_slider(slider_name, slider_config)
 
-        # Názov slidera je odstranený listu prvkov AddRemoveCombobox.
+        # Názov slidera je odstranený listu prvkov RemovingCombobox.
         self._add_slider_rc.hide_item(slider_name)
 
     def create_weight_slider(self, slider_name, slider_config):
@@ -764,7 +761,7 @@ class LayerWeightControllerFrame(QWidget):
         Popis
         ----------------------------------------------------------------------------------------------------------------
         Metóda podľa poskytnutého identifikátora zmaže požadovaný slider a pridá ho opäť medzi nezobrazené slidere v
-        prvku AddRemoveCombobox.
+        prvku RemovingCombobox.
 
         Parametre
         ----------------------------------------------------------------------------------------------------------------
@@ -800,8 +797,35 @@ class LayerWeightControllerFrame(QWidget):
         self._add_slider_rc.clear()
         self._add_slider_rc = None
 
-    def __del__(self):
-        print('Mazanie controller')
+    def create_slider(self, slider_name, lower_border, upper_border, array_ref, index):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Vytvorí sa inštancia VariableDisplaySlider, ktorá bude meniť priradenú hodnotu. Slider je taktieź vložený do ro-
+        zmiestnenia.
+
+        Parametre
+        ----------------------------------------------------------------------------------------------------------------
+        :param slider_name:  identifikačný názov slidera.
+        :param lower_border: spodná hranica, ktorú je možné pomocou slidera navoliť.
+        :param upper_border: horná hranica, ktorú je možne pomocou slidera navoliť.
+        :param array_ref:    referencia na pole, v ktorom bude menená hodnota prvku. V Pythone nie je možné meniť priamo
+                             hodnoty typu float s tým, aby nebola zmeneá adresa objektu typu float.
+        :param index:        index do poľa ukazujúci na hodnotu, ktorú má slider ovládať.
+        """
+
+        # Je vytvorená inštancia triedy VariableDisplaySlider, ktorej je nastavená minimálna veľkosť. Následne je táto
+        # inštancia inicializovaná, pomocou poskytnutých parametrov.
+        slider = VariableDisplaySlider()
+        slider.setMinimumHeight(60)
+        slider.initialize(slider_name, lower_border, upper_border, slider_name, self.on_slider_change, self.remove_slider,
+                          array_ref, index)
+        # Novo vytvorený slider je vložený do rozmiestnenia obsahu scrollovacieho okna. Odkaz na inštanciu triedy je
+        # uchovaný v slovníku, kde kľúčom je unikátne meno tohto slidera, poskytnuté ako parameter funkcie.
+        self._scroll_area_l.insertWidget(self._scroll_area_l.count() - 1, slider)
+        self._act_slider_dict[slider_name] = slider
+        # Na záver je otestované, či nebol zobrazený maximálny možný počet sliderov.
+        self.addSlider_visibility_test()
 
 
 class NoFMWeightControllerFrame(LayerWeightControllerFrame):
@@ -864,7 +888,7 @@ class NoFMWeightControllerFrame(LayerWeightControllerFrame):
         # Podľa počtu unikátnych mien v zozname je zaznamenaný maximálny možný počet sliderov, ktoré je možné zobraziť.
         self._pos_n_of_sliders = len(tmp_ordered_sliders_names)
 
-        # Tento zoznam je poslaný do inicializačnej metódy triedy AddRemoveCombobox, ktorej výstupom je zaručene uni-
+        # Tento zoznam je poslaný do inicializačnej metódy triedy RemovingCombobox, ktorej výstupom je zaručene uni-
         # kátny zoznam mien sliderov.
         final_name_list = self._add_slider_rc.initialize(tmp_ordered_sliders_names, self.handle_combobox_input,
                                                          'Add weight', False, 'Select weight')
@@ -877,29 +901,8 @@ class NoFMWeightControllerFrame(LayerWeightControllerFrame):
         # Je pridaný špeciálny prvok, ktorý slúži na zobrazenie všetkých ešte nezobrazených sliderov.
         self._add_slider_rc.add_special('Show all')
 
-        # Na záver je otestované, či má byť zobrazený AddRemoveCombobox.
+        # Na záver je otestované, či má byť zobrazený RemovingCombobox.
         self.addSlider_visibility_test()
-
-    # def add_slider(self, slider_name: str):
-    #     """
-    #     Popis
-    #     ----------------------------------------------------------------------------------------------------------------
-    #     Ide o metódu, v rámci ktorej je na pomocou unikátneho mena slidera zistené, aký druh slidera má byť vytvorený.
-    #
-    #     Parametre
-    #     ----------------------------------------------------------------------------------------------------------------
-    #     :param slider_name: unikátne meno slidera
-    #     """
-    #     # Na zákalde unikátneho mena je získaná konfiguračná n-tica pre daný typ slidera, v závislosti od ktorej bude
-    #     # ďalej zavolaná metóda, zodpovedná za vytvorenie slidera pre zmenu konrkétnych hodnôt.
-    #     slider_config = self._slider_dict[slider_name]
-    #     if slider_config[0]:
-    #         self.create_weight_slider(slider_name, slider_config)
-    #     else:
-    #         self.create_bias_slider(slider_name, slider_config)
-    #
-    #     # Názov slidera je odstranený listu prvkov AddRemoveCombobox.
-    #     self._add_slider_rc.hide_item(slider_name)
 
     def create_weight_slider(self, slider_name, slider_config):
         """
@@ -918,19 +921,12 @@ class NoFMWeightControllerFrame(LayerWeightControllerFrame):
         # inštancia prvku VariableDisplaySlider a je mu nastavená minimálna výška, aby pri zmene rozmerov okna
         # nedochádzalo k nečitateľnému zmenšeniu slidera. Následne je tento slider inicializovaný. Po inicia-
         # lizácií je slider vložený do rozmiestnenia obsahu scrollovacieho okna na pozíciu hneď pred
-        # grafický prvok triedy AddRemoveCombobox. Odkaz na novo vytvorenú inštanciu slidera je pod
+        # grafický prvok triedy RemovingCombobox. Odkaz na novo vytvorenú inštanciu slidera je pod
         # unikátnym menom vložený do slovníka. Na záver je otestované, či neboli zobrazené už
         # všetky možné slidre na vrstve.
         start_neuron = slider_config[1]
         end_neuron = slider_config[2]
-        slider_name = 'Weight {}-{}'.format(start_neuron, end_neuron)
-        slider = VariableDisplaySlider()
-        slider.setMinimumHeight(60)
-        slider.initialize(slider_name, -1, 1, slider_name, self.on_slider_change, self.remove_slider,
-                          self._weights_ref[start_neuron], end_neuron)
-        self._scroll_area_l.insertWidget(self._scroll_area_l.count() - 1, slider)
-        self._act_slider_dict[slider_name] = slider
-        self.addSlider_visibility_test()
+        self.create_slider(slider_name, -1, 1, self._weights_ref[start_neuron], end_neuron)
 
     def create_bias_slider(self, slider_name, slider_config):
         """
@@ -944,21 +940,8 @@ class NoFMWeightControllerFrame(LayerWeightControllerFrame):
         :param slider_name:   unikátne meno slidera, pod ktorým bude v slovníku uložený odkaz na inštanciu slidera
         :param slider_config: konfiguračná premenná slidera, obsahujúca informácie pre jeho vytvorenie a inicializáciu.
         """
-        # Z konfiguračnej premennej je získaný index kocového neurónu. Je vytvorená inštancia triedy
-        # VariableDisplaySlider, ktorej je nastavená minimálna veľkosť. Následne je táto inštancia
-        # inicializovaná, pomocou konfiguračnej premennej.
         end_neuron = slider_config[1]
-        slider = VariableDisplaySlider()
-        slider.setMinimumHeight(60)
-        slider.initialize(slider_name, -10, 10, slider_name, self.on_slider_change, self.remove_slider,
-                          self._bias_ref, end_neuron)
-
-        # Novo vytvorený slider je vložený do rozmiestnenia obsahu scrollovacieho okna. Odkaz na inštanciu triedy je
-        # uchovaný v slovníku, kde kľúčom je unikátne meno tohto slidera, poskytnuté ako parameter funkcie.
-        self._scroll_area_l.insertWidget(self._scroll_area_l.count() - 1, slider)
-        self._act_slider_dict[slider_name] = slider
-        # Na záver je otestované, či nebol zobrazený maximálny možný počet sliderov.
-        self.addSlider_visibility_test()
+        self.create_slider(slider_name, -10, 10, self._bias_ref, end_neuron)
 
 
 class FMWeightControllerFrame(LayerWeightControllerFrame):
@@ -1039,7 +1022,7 @@ class FMWeightControllerFrame(LayerWeightControllerFrame):
             tmp_ordered_sliders_names.append(f'Bias{feature_map_n}')
             tmp_ordered_configuration.append([False, feature_map_n])
 
-        # Pomocou pomocných zoznamov je inicializovný AddRemoveCombobox, ktorý navráti zaručene unikátne identifikátory
+        # Pomocou pomocných zoznamov je inicializovný RemovingCombobox, ktorý navráti zaručene unikátne identifikátory
         # sliderov.
         tmp_ordered_sliders_names = self._add_slider_rc.initialize(tmp_ordered_sliders_names, self.handle_combobox_input,
                                                                    'Add weight', False, 'Select weight')
@@ -1051,35 +1034,38 @@ class FMWeightControllerFrame(LayerWeightControllerFrame):
         # Na základe dĺžky zoznamu unikátnych mien je určený maximálny počet možných sliderov.
         self._pos_n_of_sliders = len(tmp_ordered_sliders_names)
 
-        # Na záver je otestované, či má byť zobrazený AddRemoveCombobox.
+        # Na záver je otestované, či má byť zobrazený RemovingCombobox.
         self.addSlider_visibility_test()
         self._add_slider_rc.add_special('Show all')
 
-    # def add_slider(self, slider_name: str):
-    #     slider_config = self._slider_dict[slider_name]
-    #     if slider_config[0]:
-    #         self.create_weight_slider(slider_name, slider_config)
-    #     else:
-    #         self.create_bias_slider(slider_name, slider_config)
-    #     self._add_slider_rc.hide_item(slider_name)
-
     def create_weight_slider(self, slider_name, slider_config):
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda vytvorí slider na zmenu váh, príslušnej vrstvy pre zvolený feature mapu.
+
+        Parametre
+        ----------------------------------------------------------------------------------------------------------------
+        :param slider_name:   identifikačné meno slidera.
+        :param slider_config: konfiguračná n-tica potrebná pre vytvorenie slidera.
+        """
+        # Je zísakná referencia na filter, ktorého váhy majú byť ovládané.
         feature_map = self._weights_ref[:, :, :, slider_config[1]]
         channel = feature_map[:, :, slider_config[2]]
-        slider = VariableDisplaySlider()
-        slider.setMinimumHeight(60)
-        slider.initialize(slider_name, -1, 1, slider_name, self.on_slider_change, self.remove_slider,
-                          channel[slider_config[3]], slider_config[4])
-        self._scroll_area_l.insertWidget(self._scroll_area_l.count() - 1, slider)
-        self._act_slider_dict[slider_name] = slider
-        self.addSlider_visibility_test()
+        self.create_slider(slider_name, -1, 1, channel[slider_config[3]], slider_config[4])
+
 
     def create_bias_slider(self, slider_name, slider_config):
-        slider = VariableDisplaySlider()
-        slider.setMinimumHeight(60)
-        slider.initialize(slider_name, -10, 10, slider_name, self.on_slider_change, self.remove_slider,
-                          self._bias_ref, slider_config[1])
-        self._scroll_area_l.insertWidget(self._scroll_area_l.count() - 1, slider)
-        self._act_slider_dict[slider_name] = slider
-        self.addSlider_visibility_test()
+        """
+        Popis
+        ----------------------------------------------------------------------------------------------------------------
+        Metóda vytvorí slider na zmenu hodnoty bias, príslušnej vrstvy pre zvolenú feature mapu.
+
+        Parametre
+        ----------------------------------------------------------------------------------------------------------------
+        :param slider_name:   identifikačné meno slidera.
+        :param slider_config: konfiguračná n-tica potrebná pre vytvorenie slidera.
+        """
+        self.create_slider(slider_name, -10, 10, self._bias_ref, slider_config[1])
+
 

@@ -1526,9 +1526,6 @@ class NeuralLayer:
         self.redraw_graph_if_active()
         self.__logic_layer.require_options_bar_update(self)
 
-    def __del__(self):
-        print('neural layer destroyed')
-
     ##############################  GETTERS SETTERS ############################################
     @property
     def layer_name(self):
@@ -1864,9 +1861,6 @@ class GraphFrame(QFrame):
         self.__graph.graph_labels = config['axis_labels']
         self.__graph.is_3d_graph = config['draw_3d']
         self.__graph.set_color_label(config['color_labels'])
-
-    def __del__(self):
-        print('mazanie graph frame')
 
     @property
     def plotting_frame(self):
