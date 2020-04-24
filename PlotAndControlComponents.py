@@ -1054,7 +1054,6 @@ class FMWeightControllerFrame(LayerWeightControllerFrame):
         channel = feature_map[:, :, slider_config[2]]
         self.create_slider(slider_name, -1, 1, channel[slider_config[3]], slider_config[4])
 
-
     def create_bias_slider(self, slider_name, slider_config):
         """
         Popis

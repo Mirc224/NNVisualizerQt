@@ -17,8 +17,8 @@ class VisualizationApp(QMainWindow):
 
         self.setWindowTitle('NN visualization tool')
         self.setContentsMargins(0, 0, 0, 0)
-        graphPage = GraphPage(self)
-        self.setCentralWidget(graphPage)
+        graph_page = GraphPage(self)
+        self.setCentralWidget(graph_page)
 
 
 class GraphPage(QWidget):
@@ -323,13 +323,13 @@ class GraphPage(QWidget):
         # Otestuje sa, či bol už nejaký model neurónovej siete načítaný. Ak nie, je informačnom elemente vypísaná výzva
         # aby používateľ najskôr načítal model neurónovej siete, pred tým ako ho môže uložiť.
         if self.__keras_model is not None:
-            file_path = ''
 
             # Ak bol nejaký model už načítaný, objaví sa dialógové okno, ktoré umožní používateľovi zvoliť miesto a 
             # názov pod ktorým chce model uložiť. Dialógové okno sa otvára v priečinku, z ktorého bol model
             # načítaný a ako preddefinovaný názov je nastavený názov načítaného modelu.
-            QFileDialog.getSaveFileName(self, 'Save Keras model', ntpath.join(self.__file_path, self.__file_name),
-                                        'Keras model (*.h5)')[0]
+            file_path = QFileDialog.getSaveFileName(self, 'Save Keras model',
+                                                    ntpath.join(self.__file_path,self.__file_name),
+                                                    'Keras model (*.h5)')[0]
 
             # Ak používateľ nevyberie žiadne okno, program skryje prípadne staré hlásenia a metóda končí. Ak bola zadaná
             # cesta a názov súboru, sú tieto informácie uložené do premenných pre budúce otváranie a ukladanie.

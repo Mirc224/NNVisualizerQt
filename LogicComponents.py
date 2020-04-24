@@ -1888,8 +1888,7 @@ class MainGraphFrame(QWidget):
                                     Ide o spätný dict k __name_to_order_dict.
     :var self.__active_layers:      referencia na list, ktorý obsahuje poradové čísla aktívnych vrstiev. Je zdieľaný
                                     s logickou vrstvou aplikácie.
-    :var self.__options_frame:      okno, v ktorom sa zobrazujú možnosti pre zvolenú vrstvu.
-    :var self.scrollable_frame:     Qt skrolovacie okno, obalom pre QtWidget scrollbar content.
+    :var self.__scrollable_frame:   Qt skrolovacie okno, obalom pre QtWidget scrollbar content.
     :var self.__scrollbar_content:  udržuje v sebe jednotlivé GraphFrame, ktoré obsahujú grafyy a ovládače váh.
     :var self.__graph_area_layout:  rozloženie komponentov v scrollbar_content widgete.
     :var self.__options_frame:      odkaz na okno s možnosťami zobrazenia vrstvy.
@@ -2844,7 +2843,7 @@ class OptionsFrame(QWidget):
         # grafických vstupov pre zadávanie zobrazených súradníc.
         self.set_cords_entries(entry_names, cords_label_text, displayed_cords, possible_cords)
 
-    def set_cords_entries(self, entry_name, cords_label_text, displayed_cords, possible_cords):
+    def set_cords_entries(self, entry_names, cords_label_text, displayed_cords, possible_cords):
         """
         Popis
         ----------------------------------------------------------------------------------------------------------------
@@ -2852,7 +2851,7 @@ class OptionsFrame(QWidget):
 
         Parametre
         ----------------------------------------------------------------------------------------------------------------
-        :param entry_name:       predstavuje list názvov pre jednotlivé grafické vstuy súradníc.
+        :param entry_names:       predstavuje list názvov pre jednotlivé grafické vstuy súradníc.
         :param cords_label_text: obsahuje informáciu o tom, z akého rozashu je možné zvoliť súradnice.
         :param displayed_cords:  list nastavených zobrazovaných hodnôt, ktoré majú byť nastavené ako preddefinované.
         :param possible_cords:   predstavuje počet súradníc, ktoré je možné zobraziť.
@@ -2864,7 +2863,7 @@ class OptionsFrame(QWidget):
         self.__possible_cords_label.setText(str(cords_label_text))
         for i in range(possible_cords):
             cord_entry_rewritable_label = self.__cords_entries_list[i]
-            cord_entry_rewritable_label.set_label_name(entry_name[i])
+            cord_entry_rewritable_label.set_label_name(entry_names[i])
             cord_entry_rewritable_label.set_variable_label(displayed_cords[i])
             cord_entry_rewritable_label.show()
 
@@ -3051,7 +3050,7 @@ class OptionsFrame(QWidget):
             self.__active_layer.use_config()
             self.__active_layer.redraw_graph_if_active()
 
-    def validate_label_entry(self, id, value):
+    def validate_label_entry(self, identificator, value):
         """
         Popis
         ----------------------------------------------------------------------------------------------------------------
@@ -3059,19 +3058,19 @@ class OptionsFrame(QWidget):
 
         Parametre
         ----------------------------------------------------------------------------------------------------------------
-        :param id:    identifikátor vstupu, ktorým sa identifikuje, ktorý vstup má byť upravený. ID nadobúda číslo
-                      od 0 po 2 a na základe toho je možné určiť os, pre ktorú sa má nazov nastaviť. Osi idú
-                      postupne [Os X, Os Y, Os Z]. Id predstavuje index vliste názvov v konfiguračnej
-                      premennej.
+        :param identificator: identifikátor vstupu, ktorým sa identifikuje, ktorý vstup má byť upravený. ID nadobúda
+                              číslo od 0 po 2 a na základe toho je možné určiť os, pre ktorú sa má nazov nastaviť.
+                              Osi idú postupne [Os X, Os Y, Os Z]. Id predstavuje index vliste názvov v
+                              konfiguračnej premennej.
         :param value: hodnota odoslaná grafickým prvkom, ktorá ma byť nastavená ako označenie pre os.
         """
-        self.__labels_entries_list[id].set_variable_label(value)
-        self.__labels_entries_list[id].show_variable_label()
-        self.__changed_config['axis_labels'][id] = value
+        self.__labels_entries_list[identificator].set_variable_label(value)
+        self.__labels_entries_list[identificator].show_variable_label()
+        self.__changed_config['axis_labels'][identificator] = value
         self.__active_layer.use_config()
         self.__active_layer.redraw_graph_if_active()
 
-    def validate_cord_entry(self, id, value):
+    def validate_cord_entry(self, identificator, value):
         """
         Popis
         ----------------------------------------------------------------------------------------------------------------
@@ -3080,13 +3079,13 @@ class OptionsFrame(QWidget):
 
         Parametre
         ----------------------------------------------------------------------------------------------------------------
-        :param id:    identifikátor stupu, na ktorom bola zadaná hodnota. Je to index do listu držiaceho odkazy na
-                      vstupy ako aj index do listu pre nastavenie súradnice pre určitú os.
-        :param value: predstavuje zadanú hodnotu, ktorá sa overuje.
+        :param identificator: identifikátor stupu, na ktorom bola zadaná hodnota. Je to index do listu držiaceho odkazy
+                              na vstupy ako aj index do listu pre nastavenie súradnice pre určitú os.
+        :param value:         predstavuje zadanú hodnotu, ktorá sa overuje.
 
         Návratová hodnota
         ----------------------------------------------------------------------------------------------------------------
-        :return       vracia True alebo False podľa toho, či bol vstup korektný alebo nie.
+        :return vracia True alebo False podľa toho, či bol vstup korektný alebo nie.
         """
         # Inicializácia premenných, ktoré budú niesť hraničné hodnoty.
         bottom_border = 0
@@ -3142,9 +3141,9 @@ class OptionsFrame(QWidget):
                     # cie zobrazovaných súradníc načítané hodnoty. Hodnoty sú zapísané do listu hodnôt na os, ktorá je
                     # určená identifikátorom vstupu.
                     if len(correct_input) == 2:
-                        changed_cords[0][id] = correct_input[0]
-                        changed_cords[1][id] = correct_input[1]
-                        self.__cords_entries_list[id].set_entry_text(output_msg)
+                        changed_cords[0][identificator] = correct_input[0]
+                        changed_cords[1][identificator] = correct_input[1]
+                        self.__cords_entries_list[identificator].set_entry_text(output_msg)
                         return_val = True
                     else:
                         return_val = False
@@ -3161,8 +3160,8 @@ class OptionsFrame(QWidget):
                     # Ak bol vstup valídny je zobrazená nova hodnota súradníc, následne je signalizovaná zmena
                     # zobrazovaných súradníc a je použitá zmenená konfiguračná premenná na aktívnej vrstve.
                     # Taktiež je prekreslený graf.
-                    self.__cords_entries_list[id].set_variable_label(output_msg)
-                    self.__cords_entries_list[id].show_variable_label()
+                    self.__cords_entries_list[identificator].set_variable_label(output_msg)
+                    self.__cords_entries_list[identificator].show_variable_label()
                     self.__changed_config['cords_changed'] = True
                     self.__active_layer.use_config()
                     self.__active_layer.redraw_graph_if_active()
@@ -3170,7 +3169,7 @@ class OptionsFrame(QWidget):
                     # Ak vstup nebol správny, je ponechaný zobrazený vstup a je nastavená výstupná správa, ktorá môže
                     # ukazovať, ktoré zo zadaných čísel bolo nesprávne. Ak sa objaví iba jedna chybova hĺaška znamená
                     # to s najväčšou pravdepodobnosťou nesprávny formát vstupu.
-                    self.__cords_entries_list[id].set_entry_text(output_msg)
+                    self.__cords_entries_list[identificator].set_entry_text(output_msg)
                 # Následne je vrátená hodnota o úspešnosti vstupu.
                 return return_val
             else:
@@ -3185,7 +3184,7 @@ class OptionsFrame(QWidget):
                 try:
                     new_value = int(value)
                 except ValueError:
-                    self.__cords_entries_list[id].set_entry_text('err')
+                    self.__cords_entries_list[identificator].set_entry_text('err')
                     return False
         elif self.__cur_used_method == 'PCA':
             # Ak bola je používaná metóda PCA, budú hraničné hodnoty a taktiež aj hodnota uložené do premenných. Pri
@@ -3201,7 +3200,7 @@ class OptionsFrame(QWidget):
             try:
                 new_value = int(value) - 1
             except ValueError:
-                self.__cords_entries_list[id].set_entry_text('err')
+                self.__cords_entries_list[identificator].set_entry_text('err')
                 return False
         elif self.__cur_used_method == 't-SNE':
             # Ak sa použije metóda t-SNE, sú podľa konfigurácie nastavené hraničné hodnoty. Zadaná hodnota je následne
@@ -3212,7 +3211,7 @@ class OptionsFrame(QWidget):
             try:
                 new_value = int(value)
             except ValueError:
-                self.__cords_entries_list[id].set_entry_text('err')
+                self.__cords_entries_list[identificator].set_entry_text('err')
                 return False
 
         # Na základe nastavených hodnôt a hraníc sa vyhodnotí, či je vstup valídny. Ak áno je nová hodnota priradená
@@ -3221,21 +3220,21 @@ class OptionsFrame(QWidget):
         # prekreslený graf.
         try:
             if not (bottom_border <= int(value) < top_border):
-                self.__cords_entries_list[id].set_entry_text('err')
+                self.__cords_entries_list[identificator].set_entry_text('err')
                 return False
 
-            self.__cords_entries_list[id].set_variable_label(value)
-            self.__cords_entries_list[id].show_variable_label()
-            changed_cords[id] = int(new_value)
+            self.__cords_entries_list[identificator].set_variable_label(value)
+            self.__cords_entries_list[identificator].show_variable_label()
+            changed_cords[identificator] = int(new_value)
             self.__changed_config['cords_changed'] = True
             self.__active_layer.use_config()
             self.__active_layer.redraw_graph_if_active()
             return True
         except ValueError:
-            self.__cords_entries_list[id].set_entry_text('err')
+            self.__cords_entries_list[identificator].set_entry_text('err')
             return False
 
-    def validate_t_sne_entry(self, id, value):
+    def validate_t_sne_entry(self, identificator, value):
         """
         Popis
         ----------------------------------------------------------------------------------------------------------------
@@ -3243,8 +3242,8 @@ class OptionsFrame(QWidget):
 
         Parmetre
         ----------------------------------------------------------------------------------------------------------------
-        :param id:    identifikátor vstupu.
-        :param value: hodnota zadaná na vstupe
+        :param identificator: identifikátor vstupu.
+        :param value:         hodnota zadaná na vstupe
 
         Návratová hodnota
         ----------------------------------------------------------------------------------------------------------------
@@ -3264,16 +3263,16 @@ class OptionsFrame(QWidget):
                 # na vstupe vypísaná chybová hláška. Ak je nová hodnota odlišná od posledne použitej
                 # hodnoty, označí sa grafický prvok ako zmenený, to znamená, že sa zmení jeho farba
                 # na červenú a k jeho názvu je pridaná hviezidčka.
-                test_tuple = self.__changed_config['t_SNE_config']['parameter_borders'][id]
+                test_tuple = self.__changed_config['t_SNE_config']['parameter_borders'][identificator]
                 if not (test_tuple[0] <= test_tuple[1](value) <= test_tuple[2]):
-                    self.__tSNE_parameters_dict[id].set_entry_text('err')
+                    self.__tSNE_parameters_dict[identificator].set_entry_text('err')
                     return False
-                parameter_label = self.__tSNE_parameters_dict[id]
+                parameter_label = self.__tSNE_parameters_dict[identificator]
                 parameter_label.set_variable_label(value)
                 parameter_label.show_variable_label()
-                self.__changed_config['t_SNE_config']['options_config'][id] = test_tuple[1](value)
-                if self.__changed_config['t_SNE_config']['options_config'][id] == \
-                        self.__changed_config['t_SNE_config']['used_config'][id]:
+                self.__changed_config['t_SNE_config']['options_config'][identificator] = test_tuple[1](value)
+                if self.__changed_config['t_SNE_config']['options_config'][identificator] == \
+                        self.__changed_config['t_SNE_config']['used_config'][identificator]:
                     parameter_label.set_mark_changed(False)
                 else:
                     parameter_label.set_mark_changed(True)
@@ -3281,7 +3280,7 @@ class OptionsFrame(QWidget):
             else:
                 return False
         except ValueError:
-            self.__tSNE_parameters_dict[id].set_entry_text('err')
+            self.__tSNE_parameters_dict[identificator].set_entry_text('err')
             return False
 
     def get_checked_method(self):

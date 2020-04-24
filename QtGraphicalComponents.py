@@ -640,7 +640,7 @@ class DisplaySlider(QWidget):
         :var self.__id:         atribút, ktorý umožňuje nastavenia identifikátora slidera.
         :var self.__wrapper_gb: obaľovací element. Je mu nastavené meno slidera.
         :var self._slider:      slider umožňujúci nastavenie desatinných čísel.
-        :var self.__ent_lbl_gb: obaľuje elementy vstupu a labelu zobrazujúceho nastavenú hodnotu.
+        :var self.__ent_lbl_gb: obaľujeelementy vstupu a labelu zobrazujúceho nastavenú hodnotu.
         """
         super(DisplaySlider, self).__init__(*args, **kwargs)
         self.__id = None
