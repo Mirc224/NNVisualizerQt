@@ -467,7 +467,12 @@ class GraphLogicLayer:
                     # neurónovej siete a sú priradené do premennej, ktorá v sebe drží vstupné dáta, ktoré sú
                     # posielané do modelu. Po úspešnom načítaní je potrebné resetovať kofniguračnú premennú
                     # bodov. Následne je v konfiguračnom súbore nastavená pre všetky body základná farba.
-                    self.__input_data = np.array(images_arr_list).reshape(-1, *self.__keras_model.input_shape[-3:])
+
+                    try:
+                        new_value = np.array(images_arr_list).reshape(-1, *self.__keras_model.input_shape[-3:])
+                    except Exception as e:
+                        return e
+                    self.__input_data = new_value
                     self.reset_points_config()
 
                     basic_color_list = self.__points_config['default_color']
@@ -500,7 +505,10 @@ class GraphLogicLayer:
 
                     # Zoznam vytvorených absolútnych ciest je zaslaný do metódy, ktorá sa postará o načítanie vstupov
                     # a zmenu ich rozmeru podľa požadovaného rozmeru pre vstup neuronovej siete.
-                    images_arr_list = self.load_and_reshape_images(image_path_list, self.__keras_model.input_shape)
+                    try:
+                        images_arr_list = self.load_and_reshape_images(image_path_list, self.__keras_model.input_shape)
+                    except Exception as e:
+                        return e
 
                     # Do listu, ktorý drží triedy doposiaľ načítaných bodov, je pridaný názov triedy v závislosti od
                     # počtu načítaných obrázkov. Ku listu všetkých dát je pripočítaný list načítaných dát z
@@ -679,7 +687,10 @@ class GraphLogicLayer:
                 return 'No points loaded!'
 
             # Následne sú dáta načítané pomocou funkcie z knižnice pandas.
-            data = pd.read_csv(filepath, header=None)
+            try:
+                data = pd.read_csv(filepath, header=None)
+            except Exception as e:
+                return e
 
             # Súbor musí obsahovať iba hodnoty tried prislúchajúce jednotlivým bodom, preto je potrebné skontorlovať
             # počet načítnaých stĺpcov.
@@ -2022,8 +2033,9 @@ class MainGraphFrame(QWidget):
         else:
             self.__add_rm_layer_rc.hide()
 
-        first_layer_tuple = (self.__neural_layers[0].layer_number, self.__neural_layers[0].layer_name)
-        self.show_layer(first_layer_tuple)
+        if len(self.__neural_layers):
+            first_layer_tuple = (self.__neural_layers[0].layer_number, self.__neural_layers[0].layer_name)
+            self.show_layer(first_layer_tuple)
 
     def show_layer(self, layer_tuple: tuple):
         """

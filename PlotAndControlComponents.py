@@ -105,6 +105,7 @@ class PlottingFrame(QWidget):
         # Je vyytvorené hlavné rozmiestnenie, ktoré je nastavné triede. Do tohto rozmiestnenia je pridané najskôr plát-
         # no, ktoré zabezpečuje vykresľovanie grafu a následne toolbar pre manipuláciu s 2D grafom. Na plátno je
         # pripijený signál, ktorý sa vyvolá pri udalosti kliknutia.
+        self.setMinimumHeight(50)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.__canvas)
@@ -662,7 +663,8 @@ class LayerWeightControllerFrame(QWidget):
                 if len(self._act_slider_dict) + 1 > 1500:
                     # V prípade ak by pridaním slidera bol prekročený kritický počet, je zobrazené varovné okno, ktoré
                     # od užívateľa požaduje informáciu, či chce aj napriek tomu pokračovať.
-                    if self.show_warning() != 0:
+                    if self.show_warning('You are going to add another slider, this may lead to performance issues.',
+                                         'Would you like to add slider anyway?') != 0:
                         # Ak si používateľ zvolí, že nechce pokračovat, metóda konćí a slider nie je zobrazený.
                         return
                 # Ak sa používateľ rozhodne pokračovať je zaslaný identifikátor slidera do metódy zodpovednej za jeho
@@ -676,17 +678,20 @@ class LayerWeightControllerFrame(QWidget):
             # Select all.
             list_of_remaining = list_of_remaining[1:].copy()
             # Je overené či pridaním daného počtu sliderov nepresiahne počet sliderov kritickú hranicu.
-            if len(self._act_slider_dict) + len(list_of_remaining) > 1500:
+            number_of_next_sliders = len(list_of_remaining)
+            if len(self._act_slider_dict) + number_of_next_sliders > 1500:
                 # Ak túto hranicu presiahne, je o tom používateľ informovaný a čaká sa od neho odpoveď či chce napriek
                 # tomu pokračovať.
-                if self.show_warning() != 0:
+                middle_part = 'another slider' if number_of_next_sliders < 2 else f'{number_of_next_sliders} sliders'
+                if self.show_warning(f'You are going to add {middle_part}, this may lead to performance issues.',
+                                     'Would you like to add slider anyway?') != 0:
                     # Ak si nezvolí možnosť, že chce pokračovať, alebo okno zavrie, metóda končí.
                     return
             # Následne je list nezobrazených sliderov postupne prechádzaný a slidere sú zobrazované.
             for name in list_of_remaining:
                 self.add_slider(name)
 
-    def show_warning(self):
+    def show_warning(self, text, informative_text):
         """
         Popis
         ----------------------------------------------------------------------------------------------------------------
@@ -700,8 +705,8 @@ class LayerWeightControllerFrame(QWidget):
         warning_dialog = QMessageBox()
         warning_dialog.setIcon(QMessageBox.Warning)
         warning_dialog.setWindowTitle('Warning')
-        warning_dialog.setText('You are going to add another slider, this may lead to performance issues.')
-        warning_dialog.setInformativeText('Would you like to add slider anyway?')
+        warning_dialog.setText(text)
+        warning_dialog.setInformativeText(informative_text)
         warning_dialog.addButton('Yes', QMessageBox.YesRole)
         default = warning_dialog.addButton('No', QMessageBox.NoRole)
         warning_dialog.setDefaultButton(default)

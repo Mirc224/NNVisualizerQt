@@ -57,12 +57,6 @@ class GraphPage(QWidget):
         # Vytvorenie logickej vrstvy aplikácie.
         self.__logic_layer = GraphLogicLayer(self.__mg_frame)
 
-        # self.open_model('./modelik.h5')
-        self.open_model('./cnn_mnist.h5')
-        # self.open_model('./small_1channel.h5')
-        # self.open_model('./small_cnn.h5')
-        # self.load_points('./2d_input.txt')
-
     def initialize_ui(self):
         """
         Popis
@@ -136,17 +130,18 @@ class GraphPage(QWidget):
         # Priadanie label elementu, zobrazujúceho informácie do rozmiestnenia v rámci skupiny tlačidiel pre otvorenie
         # modelu, načítanie vstupov a načítania labels.
         open_load_layout.addWidget(self.__load_ilabel, alignment=QtCore.Qt.AlignRight)
+        # Pridanie informačného label elementu o ukladaní modelu do rozmiestnenia v rámci skupiny obsahujúcej tlačidlo
+        # na uloženie modelu.
+        save_layout.addWidget(self.__save_ilabel)
 
         # Inicializácia tlačidla pre uloženie modelu. Natavenie textu zobrazovaného na tlačidle,
         # nastavenie funkcie, ktorá sa vykoná po kliknutí na tlačidlo.
         # Pridanie tlačidla do rozmiestenia tlačidiel v rámci wrappera.
         save_btn = QPushButton('Save model', group_wrapper_save)
         save_btn.clicked.connect(self.save_model)
-        save_layout.addWidget(save_btn)
+        save_layout.addWidget(save_btn, alignment=QtCore.Qt.AlignRight)
 
-        # Pridanie informačného label elementu o ukladaní modelu do rozmiestnenia v rámci skupiny obsahujúcej tlačidlo
-        # na uloženie modelu.
-        save_layout.addWidget(self.__save_ilabel)
+
 
         # Pridanie wrappera skupiny načítacích elementov do rozmiestnenia. Nachádza sa na ľavej strane a je taktiež
         # zarovnaný naľavo.
@@ -186,11 +181,20 @@ class GraphPage(QWidget):
         # Cesta k súboru sa rozdelí na adresu smerujúcu do priečinka obsahujúcu súbor a názov súboru. Tie sú priradené
         # do premenných, na základe ktorých sa pri ďalšom otváraní modelu, alebo načítaní vstupov dialogové okno otvorí
         # s otvoreným priečinkom, z ktorého bol model načítaný.
+        previous_file_path = self.__file_path
+        previous_file_name = self.__file_name
         self.__file_path, self.__file_name = ntpath.split(file_path)
 
         # Keras funkcia, ktorá načíta model na zákalde cestky k súboru.
-        self.__keras_model = keras.models.load_model(file_path)
-
+        try:
+            self.__keras_model = keras.models.load_model(file_path)
+        except Exception as e:
+            self.__file_path = previous_file_path
+            self.__file_name = previous_file_name
+            self.__keras_model = None
+            self.__load_ilabel.setText("<font color='red'>{}</font>".format('Error during opening model!'))
+            self.__load_ilabel.show()
+            return
         # Inicializácia logickej vrstvy na základe načítaného modelu.
         self.__logic_layer.initialize(self.__keras_model)
 
