@@ -15,7 +15,7 @@ class VisualizationApp(QMainWindow):
         # super(VisualizationApp, self).__init__(*args, **kwargs)
         super(VisualizationApp, self).__init__(*args, **kwargs)
 
-        self.setWindowTitle('NN visualization tool')
+        self.setWindowTitle('NN Visualization Tool')
         self.setContentsMargins(0, 0, 0, 0)
         graph_page = GraphPage(self)
         self.setCentralWidget(graph_page)

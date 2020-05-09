@@ -226,12 +226,12 @@ class GraphLogicLayer:
                 activations_end = [activations_end]
 
             # Výpočítané výstupné súradnice hrán sú v cykle priradené atribútom v príslušných vrstiev.
-            for layer_number in layers_for_update:
+            for i, layer_number in enumerate(layers_for_update):
 
                 # Začiatočne a koncové body hrán pre konkrétnu vrstvu musia byť transponované. Z transponovaných bodov
                 # je vytvorená dvojica ktorá je priradená atribútu príslušnej neurónovej vrstvy.
-                start_points = activations_start[layer_number].transpose()
-                end_points = activations_end[layer_number].transpose()
+                start_points = activations_start[i].transpose()
+                end_points = activations_end[i].transpose()
                 self.__neural_layers[layer_number].polygon_cords_tuples = [start_points, end_points]
 
     def monitor_change(self):

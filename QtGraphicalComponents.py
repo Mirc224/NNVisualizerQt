@@ -747,7 +747,9 @@ class DisplaySlider(QWidget):
         ----------------------------------------------------------------------------------------------------------------
         Nad bežcom zobrazí práve nastavenú hodnotu.
         """
-        self.__value_label.setText(str(self.get_formated_value()))
+        str_value = str(self.get_formated_value())
+        self.__value_label.setText(str_value)
+        self.__value_entry.setText(str_value)
         self.__value_label.adjustSize()
         self.__ent_lbl_gb.adjustSize()
         new_x = self.convert_to_pixels(self._slider.value())
